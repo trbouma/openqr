@@ -32,6 +32,22 @@
   <p>{{ artifact_status.message }}</p>
   {% if artifact_status.verified %}
   <p>{{ artifact_status.size_bytes }} bytes</p>
+  {% if artifact_status.media_type %}
+  <div class="artifact-preview" data-media-type="{{ artifact_status.media_type }}"
+       data-media-url="/artifact/{{ campaign_id }}/{{ result.digest }}?preview=true">
+    <p class="preview-status" role="status">Loading preview. Please wait...</p>
+    <img class="artifact-image" alt="Digital artifact preview" hidden>
+    <div class="pdf-controls" hidden>
+      <button type="button" data-prev aria-label="Previous page" title="Previous page">&#8592;</button>
+      <span class="page-label" aria-live="polite"></span>
+      <button type="button" data-next aria-label="Next page" title="Next page">&#8594;</button>
+    </div>
+    <canvas class="artifact-canvas" aria-label="PDF page preview" hidden></canvas>
+  </div>
+  <script type="module" src="/static/preview.js"></script>
+  {% else %}
+  <p>No preview is available for this file type.</p>
+  {% endif %}
   <a class="secondary-button" href="/artifact/{{ campaign_id }}/{{ result.digest }}">Download verified artifact</a>
   {% endif %}
 </section>

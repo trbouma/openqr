@@ -115,3 +115,27 @@ def test_registration_requires_signing_configuration(monkeypatch):
     monkeypatch.setattr(main, "SIGNER_NSEC", None)
     response = client.post("/register", files={"file": ("test.txt", b"test", "text/plain")})
     assert response.status_code == 503
+
+
+@pytest.mark.parametrize("content, media_type", [(b"%PDF-1.7\npreview", "application/pdf"), (b"\x89PNG\r\n\x1a\npreview", "image/png")])
+def test_verified_preview_response(monkeypatch, content, media_type):
+    import io
+    from app import registration
+    digest = hashlib.sha256(content).hexdigest()
+    monkeypatch.setattr(registration.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(content))
+    response = client.get(f"/artifact/etr/{digest}?preview=true")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == media_type
+    assert response.headers["content-disposition"].startswith("inline;")
+    assert response.content == content
+    assert client.get(f"/artifact/etr/{'0' * 64}?preview=true").status_code == 502
+
+
+def test_active_content_is_download_only(monkeypatch):
+    import io
+    from app import registration
+    content = b"<svg onload='alert(1)'></svg>"
+    digest = hashlib.sha256(content).hexdigest()
+    monkeypatch.setattr(registration.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(content))
+    assert client.get(f"/artifact/etr/{digest}?preview=true").status_code == 415
+    assert client.get(f"/artifact/etr/{digest}").status_code == 200

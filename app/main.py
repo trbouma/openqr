@@ -28,6 +28,7 @@ from app.registration import (
     publish_anchor,
     retrieve_artifact,
     fetch_artifact,
+    preview_type,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -195,7 +196,7 @@ async def resolve_input(reference: str = Query(..., min_length=1)):
 
 
 @app.get("/artifact/{campaign_id}/{reference}")
-async def download_artifact(campaign_id: str, reference: str):
+async def download_artifact(campaign_id: str, reference: str, preview: bool = False):
     try:
         _, digest, _ = normalize_lookup(reference)
     except InvalidResolutionReference as exc:
@@ -207,8 +208,11 @@ async def download_artifact(campaign_id: str, reference: str):
         raise HTTPException(502, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(502, "Artifact retrieval unavailable.") from exc
-    return Response(content, media_type="application/octet-stream", headers={
-        "Content-Disposition": f'attachment; filename="{digest}"',
+    media_type = preview_type(content) if preview else None
+    if preview and not media_type:
+        raise HTTPException(415, "No preview is available for this file type.")
+    return Response(content, media_type=media_type or "application/octet-stream", headers={
+        "Content-Disposition": f'{"inline" if preview else "attachment"}; filename="{digest}"',
         "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
     })
 

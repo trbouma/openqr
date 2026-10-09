@@ -28,6 +28,12 @@ server and verifies its SHA-256 digest. Verified bytes can be downloaded through
 oversized, or mismatched artifacts are reported without hiding retrieved anchor
 evidence. The JSON resolver includes artifact retrieval status.
 
+Resolver pages render PDF documents with page controls using the same bundled
+PDF.js viewer as OpenETR, and display PNG, JPEG, GIF, and WebP images inline.
+Preview types are detected from verified bytes. Other formats remain available
+as downloads. PDF.js and its fonts are served locally under `app/static/js`,
+with their upstream license notices preserved.
+
 ## Run Locally With Poetry
 
 ```sh

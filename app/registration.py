@@ -56,7 +56,22 @@ async def retrieve_artifact(digest: str, *, server: str, timeout: float, max_byt
         return {"verified": False, "message": str(exc)}
     except Exception:
         return {"verified": False, "message": "The artifact could not be retrieved from the configured Blossom server."}
-    return {"verified": True, "size_bytes": len(content), "message": "Artifact retrieved and SHA-256 verified."}
+    return {"verified": True, "size_bytes": len(content), "media_type": preview_type(content),
+            "message": "Artifact retrieved and SHA-256 verified."}
+
+
+def preview_type(content: bytes) -> str | None:
+    if content.startswith(b"%PDF-"):
+        return "application/pdf"
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 BLOSSOM_AUTH_KIND = 24242
 BLOSSOM_AUTH_TTL_SECONDS = 5 * 60
