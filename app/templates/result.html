@@ -1,11 +1,7 @@
 {% extends "base.html" %}
 {% block title %}OpenQR · Resolution result{% endblock %}
 {% block content %}
-<section class="resolver-qr">
-  <h1>QR code</h1>
-  <img src="/qr/{{ campaign_id }}/{{ result.digest }}" alt="QR code for this artifact" width="240" height="240">
-</section>
-
+{% set anchor_details %}
 {% for anchor in result.anchors %}
 <article class="evidence-card">
   <div class="evidence-title">
@@ -26,9 +22,10 @@
   <p>No matching Anchor Record was returned from the configured relays.</p>
 </section>
 {% endfor %}
+{% endset %}
 
 <section class="summary-panel">
-  <h2>Digital artifact</h2>
+  <h1 class="artifact-heading">Digital artifact</h1>
   {% if artifact_status.verified %}
   {% if artifact_status.media_type %}
   <div class="artifact-preview" data-media-type="{{ artifact_status.media_type }}"
@@ -51,4 +48,18 @@
   <p>{{ artifact_status.message }}</p>
   {% endif %}
 </section>
+
+<section class="resolver-qr" data-resolver-link="{{ share_url }}">
+  <h2>QR code</h2>
+  <img src="/qr/{{ campaign_id }}/{{ result.digest }}" alt="QR code for this artifact" width="240" height="240">
+  <div class="share-actions">
+    <button type="button" data-copy-qr>Copy QR code</button>
+    <button type="button" data-copy-link>Copy link</button>
+  </div>
+  <p class="copy-status" role="status" aria-live="polite"></p>
+  <a class="resolver-link" href="{{ share_url }}">{{ share_url }}</a>
+</section>
+
+{{ anchor_details }}
+<script type="module" src="/static/share.js"></script>
 {% endblock %}

@@ -23,6 +23,11 @@
 .page-label { min-width: 5rem; text-align: center; }
 .preview-status { color: var(--muted); }
 .resolver-qr { text-align: center; }
+.resolver-qr { margin-block: 2rem; }
+.artifact-heading { font-size: 1.5rem; max-width: none; line-height: 1.2; }
+.share-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; }
+.copy-status { min-height: 1.5em; margin: .75rem 0; color: var(--muted); }
+.resolver-qr .resolver-link { text-align: center; }
 .resolver-qr h1 { max-width: none; font-size: 1.5rem; }
 .resolver-qr img { display: block; width: 240px; max-width: 100%; height: auto; margin: 1rem auto; }
 html { min-height: 100%; background: var(--page); -webkit-text-size-adjust: 100%; }

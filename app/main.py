@@ -241,7 +241,8 @@ async def resolve_html(request: Request, campaign_id: str, reference: str):
     return templates.TemplateResponse(
         request,
         "result.html",
-        template_context(request, result=result, campaign_id=campaign_id, artifact_status=artifact_status),
+        template_context(request, result=result, campaign_id=campaign_id, artifact_status=artifact_status,
+                         share_url=resolver_url(request, campaign_id, base64url_digest(result.digest))),
     )
 
 
