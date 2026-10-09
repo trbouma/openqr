@@ -1,6 +1,7 @@
 FROM python:3.11-slim-bookworm AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
+    VIRTUAL_ENV=/opt/venv \
     PATH=/opt/venv/bin:$PATH
 
 RUN apt-get update \
@@ -12,7 +13,8 @@ WORKDIR /build
 COPY pyproject.toml poetry.lock README.md /build/
 RUN pip install poetry \
     && poetry config virtualenvs.create false \
-    && poetry install --only main --no-interaction --no-ansi
+    && poetry install --only main --no-interaction --no-ansi \
+    && /opt/venv/bin/gunicorn --version
 
 FROM python:3.11-slim-bookworm AS runtime
 
@@ -29,9 +31,11 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 COPY app /app/app
 
+RUN /opt/venv/bin/gunicorn --check-config app.main:app -k uvicorn.workers.UvicornWorker
+
 USER openqr
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import json, urllib.request; response = json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert response.get('status') == 'ok'"
 
-CMD ["gunicorn", "app.main:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--worker-tmp-dir", "/tmp", "--no-control-socket"]
+CMD ["/opt/venv/bin/gunicorn", "app.main:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--worker-tmp-dir", "/tmp"]
