@@ -22,6 +22,18 @@ def test_home_page():
     assert "Check a digital artifact" in response.text
 
 
+@pytest.mark.parametrize("path, status_id", [("/", "lookup-progress"), ("/register", "register-progress")])
+def test_forms_include_progress_feedback(path, status_id):
+    response = client.get(path)
+    assert response.status_code == 200
+    assert f'data-progress="{status_id}"' in response.text
+    assert f'id="{status_id}"' in response.text
+    assert 'role="status"' in response.text
+    assert "Please wait." in response.text
+    assert 'src="/static/progress.js" defer' in response.text
+    assert client.get("/static/progress.js").status_code == 200
+
+
 def test_assets_use_relative_urls_behind_https_proxy():
     response = client.get("/", headers={"host": "example.com", "x-forwarded-proto": "https"})
     assert 'href="/static/styles.css"' in response.text

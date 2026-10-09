@@ -58,6 +58,11 @@ main { padding-block: clamp(2.5rem, 7vw, 5rem); }
 .lookup-panel { max-width: 48rem; border-top: 3px solid var(--accent-strong); }
 .lookup-panel h2, .summary-panel h2 { margin-bottom: 1rem; }
 form { display: grid; gap: .65rem; }
+.request-progress { display: flex; align-items: center; gap: .6rem; min-height: 1.6em; margin: .75rem 0 0; color: var(--muted); font-size: .9rem; }
+.progress-spinner { flex: 0 0 auto; width: 1rem; height: 1rem; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: progress-spin .8s linear infinite; }
+form[aria-busy="true"] button:disabled { opacity: .65; cursor: wait; }
+@keyframes progress-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .progress-spinner { animation: none; } }
 label { font-size: .88rem; font-weight: 700; }
 input { width: 100%; min-height: 3.2rem; padding: .72rem .85rem; border: 1px solid var(--border); border-radius: 6px; outline: none; background: #08172a; color: var(--text); font: inherit; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 input[type="file"] { min-height: auto; padding: .7rem; }

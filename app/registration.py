@@ -176,7 +176,12 @@ def upload_to_blossom(
     timeout: float,
 ) -> dict[str, Any]:
     url = blossom_blob_url(artifact.digest, server)
-    if blossom_exists(digest=artifact.digest, server=server, timeout=timeout):
+    try:
+        already_present = blossom_exists(digest=artifact.digest, server=server, timeout=timeout)
+    except (OSError, urllib.error.URLError):
+        # This is only an optimization; a failed HEAD must not prevent the upload.
+        already_present = False
+    if already_present:
         return {
             "stored": True,
             "already_present": True,
@@ -201,13 +206,31 @@ def upload_to_blossom(
         },
         method="PUT",
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        response.read()
-        if not 200 <= response.status < 300:
-            raise RuntimeError(f"Blossom upload failed with HTTP {response.status}")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            if not 200 <= response.status < 300:
+                raise RuntimeError(f"Blossom upload failed with HTTP {response.status}")
+        # The response descriptor is not needed; avoid waiting for its body.
+        confirmed = blossom_exists(digest=artifact.digest, server=server, timeout=timeout)
+    except (OSError, urllib.error.URLError):
+        confirmed = False
 
-    if not blossom_exists(digest=artifact.digest, server=server, timeout=timeout):
-        raise RuntimeError("Blossom accepted the upload but did not return the artifact by digest")
+    if not confirmed:
+        # Never retry PUT automatically: a lost response can follow a successful write.
+        try:
+            fetch_artifact(
+                artifact.digest, server=server, timeout=min(timeout, 5.0),
+                max_bytes=artifact.size_bytes,
+            )
+        except (OSError, urllib.error.URLError, ValueError):
+            return {
+                "stored": None,
+                "already_present": False,
+                "server": server,
+                "url": url,
+                "message": "Blossom storage could not be confirmed. The server may have saved "
+                "the artifact. Open the resolver link to check before registering again.",
+            }
 
     return {
         "stored": True,
