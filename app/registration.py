@@ -88,6 +88,23 @@ class ArtifactUploadTooLarge(ValueError):
     pass
 
 
+async def hash_artifact(file: UploadFile, *, max_bytes: int) -> str:
+    """Hash an uploaded original without retaining another in-memory copy."""
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        while chunk := await file.read(READ_CHUNK_BYTES):
+            size += len(chunk)
+            if size > max_bytes:
+                raise ArtifactUploadTooLarge(
+                    f"The artifact exceeds the maximum upload size of {max_bytes} bytes."
+                )
+            digest.update(chunk)
+    finally:
+        await file.close()
+    return digest.hexdigest()
+
+
 @dataclass(frozen=True)
 class UploadedArtifact:
     filename: str

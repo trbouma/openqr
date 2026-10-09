@@ -35,7 +35,7 @@ class EncryptedSessionMiddleware:
         async def send_session(message):
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
-                if scope["path"] in {"/register", "/login", "/logout", "/profiles/use"}:
+                if scope["path"] in {"/", "/check-file", "/register", "/login", "/logout", "/profiles/use"}:
                     headers["Cache-Control"] = "no-store"
                     headers["Referrer-Policy"] = "same-origin"
                 if session != initial:

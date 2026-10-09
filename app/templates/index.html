@@ -4,7 +4,7 @@
 <section class="intro">
   <p class="eyebrow">Evidence for what follows</p>
   <h1>Check a digital artifact</h1>
-  <p>Enter the digest from an OpenETR QR code or paste its complete resolver URL. OpenQR looks for signed Anchor Records without requiring an account.</p>
+  <p>Enter a digest or resolver URL, or upload the original file. OpenQR looks for signed Anchor Records without requiring an account.</p>
 </section>
 
 <section class="lookup-panel" aria-labelledby="lookup-heading">
@@ -18,7 +18,20 @@
     <button type="submit">Check evidence</button>
   </form>
   <p id="lookup-progress" class="request-progress" role="status" aria-live="polite" aria-atomic="true"><span class="progress-spinner" aria-hidden="true" hidden></span><span data-progress-message="Please wait. Checking evidence and retrieving the artifact..."></span></p>
-  <p class="field-note">Accepts a 64-character lowercase SHA-256 digest, its 43-character unpadded Base64URL form, or a standard <code>/etr/</code> resolver URL.</p>
+  <p class="field-note">Accepts a hexadecimal or Base64URL SHA-256 digest, a campaign resolver URL, or an OpenQR GS1 Digital Link.</p>
+</section>
+
+<section class="lookup-panel" aria-labelledby="original-heading">
+  <h2 id="original-heading">Check an original file</h2>
+  {% if upload_error %}<p class="notice notice-error" role="alert">{{ upload_error }}</p>{% endif %}
+  <form action="/check-file" method="post" enctype="multipart/form-data" data-progress="file-check-progress">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="original-file">Original digital artifact</label>
+    <input id="original-file" name="file" type="file" required>
+    <p class="field-note">Maximum size: {{ max_upload_bytes }} bytes. The file is sent to OpenQR to calculate its digest, then discarded. It is not published or stored on Blossom.</p>
+    <button type="submit">Check file</button>
+  </form>
+  <p id="file-check-progress" class="request-progress" role="status" aria-live="polite" aria-atomic="true"><span class="progress-spinner" aria-hidden="true" hidden></span><span data-progress-message="Please wait. Uploading and checking the original file..."></span></p>
 </section>
 
 <section class="steps" aria-label="How OpenQR works">

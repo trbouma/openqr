@@ -29,6 +29,7 @@ from app.registration import (
     base64url_digest,
     maybe_upload_to_blossom,
     read_artifact,
+    hash_artifact,
     render_qr_png,
     publish_anchor,
     retrieve_artifact,
@@ -91,7 +92,7 @@ def template_context(request: Request, **values):
         "signed_in": bool(request.session.get("root_nsec")),
         "acting_profile": request.session.get("profile"),
         "acting_npub": request.session.get("profile_npub"),
-        "csrf_token": csrf_token(request) if request.url.path in {"/register", "/login", "/profiles/use"} else "",
+        "csrf_token": csrf_token(request) if request.url.path in {"/", "/check-file", "/register", "/login", "/profiles/use"} else "",
         "max_upload_bytes": MAX_UPLOAD_BYTES,
         **values,
     }
@@ -204,6 +205,22 @@ async def home(request: Request):
 @app.get("/register", response_class=HTMLResponse)
 async def register_form(request: Request):
     return await registration_page(request)
+
+
+@app.post("/check-file", response_class=HTMLResponse)
+async def check_original(request: Request, file: UploadFile = File(...), csrf: str = Form("")):
+    try:
+        check_csrf(request, csrf)
+    except HTTPException:
+        await file.close()
+        raise
+    try:
+        digest = await hash_artifact(file, max_bytes=MAX_UPLOAD_BYTES)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            request, "index.html", template_context(request, upload_error=str(exc)), status_code=400,
+        )
+    return RedirectResponse(f"/etr/{base64url_digest(digest)}", status_code=303)
 
 
 @app.post("/register", response_class=HTMLResponse)

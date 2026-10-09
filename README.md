@@ -188,6 +188,17 @@ rebuilds and recreates the service, and waits for `/health` to report success.
 ```sh
 poetry run pytest
 ```
+## Check an original file
+
+The home page accepts an original file as an alternative to a digest or URL.
+OpenQR hashes the uploaded bytes in chunks, closes/discards the temporary upload,
+and redirects to the normal digest lookup. No account or signing key is required;
+no event is published and no copy is sent to Blossom. The upload is sent to the
+OpenQR server, not hashed exclusively in the browser. Framework multipart handling
+may spool it to temporary disk. `OPENQR_MAX_UPLOAD_BYTES` and proxy upload limits
+apply. The resulting page independently retrieves signed evidence and, if available,
+a verified artifact from Blossom; absence of a stored copy does not preclude evidence.
+
 ## MP4 playback
 
 Artifact resolution previews recognized MP4 containers in a native browser video

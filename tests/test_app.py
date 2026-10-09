@@ -52,6 +52,35 @@ def test_home_page():
     assert "Check a digital artifact" in response.text
 
 
+@pytest.mark.parametrize("content", [b"original file", b"", b"x" * 150000])
+def test_original_file_check_is_anonymous_and_read_only(monkeypatch, content):
+    from app import main
+    from app.registration import base64url_digest
+    async def forbidden(*args, **kwargs):
+        pytest.fail("Checking a file must not publish or store it")
+    monkeypatch.setattr(main, "publish_anchor", forbidden)
+    monkeypatch.setattr(main, "maybe_upload_to_blossom", forbidden)
+    page = client.get("/")
+    token = re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
+    assert page.headers["cache-control"] == "no-store"
+    response = client.post("/check-file", data={"csrf": token},
+                           files={"file": ("original.bin", content)}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/etr/" + base64url_digest(hashlib.sha256(content).hexdigest())
+
+
+def test_original_file_check_limits_and_csrf(monkeypatch):
+    from app import main
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 2)
+    assert client.post("/check-file", files={"file": ("x", b"abc")}).status_code == 403
+    page = client.get("/")
+    token = re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
+    response = client.post("/check-file", data={"csrf": token}, files={"file": ("x", b"abc")})
+    assert response.status_code == 400
+    assert "exceeds the maximum upload size" in response.text
+    assert 'data-progress="file-check-progress"' in response.text
+
+
 @pytest.mark.parametrize("path, status_id", [("/", "lookup-progress"), ("/register", "register-progress")])
 def test_forms_include_progress_feedback(path, status_id):
     response = client.get(path)
