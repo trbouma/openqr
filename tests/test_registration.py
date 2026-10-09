@@ -29,7 +29,10 @@ def test_anchor_publishing_requires_acknowledgement_and_signs_hints(monkeypatch)
     monkeypatch.setattr(module, "RelayPool", Pool)
     options = dict(signer_nsec=keys.private_key_bech32(), relays=["wss://example.com"], timeout=1,
                    blossom_servers=["https://example.com/", "https://EXAMPLE.com:443"])
-    assert asyncio.run(module.publish_anchor(item, **options))["published"]
+    result = asyncio.run(module.publish_anchor(item, **options))
+    assert result["published"]
+    assert result["target_relays"] == options["relays"]
+    assert result["relays"] == options["relays"]
     async def rejected(self, event):
         return []
     monkeypatch.setattr(Pool, "publish", rejected)
@@ -39,6 +42,8 @@ def test_anchor_publishing_requires_acknowledgement_and_signs_hints(monkeypatch)
     monkeypatch.setattr(Pool, "publish", failed)
     result = asyncio.run(module.publish_anchor(item, **options))
     assert not result["published"] and result["event_id"]
+    assert result["target_relays"] == options["relays"]
+    assert result["relays"] == []
 
 
 @pytest.mark.parametrize("require,required", [("any", 1), ("half", 1), ("majority", 2), ("all", 2)])

@@ -274,6 +274,11 @@ async def register_artifact(
             ),
             blossom=blossom,
             anchor=anchor,
+            publication_relay_source="Acting Profile (home relays if unset)" if REGISTRATION_MODE == "interactive" else "Deployment relay configuration",
+            relay_scope_mismatch=bool(anchor.get("relays")) and not (
+                {relay.rstrip("/") for relay in anchor["relays"]}
+                & {relay.rstrip("/") for relay in DEFAULT_RELAYS}
+            ),
         ),
         status_code=200 if anchor["published"] else 502,
     )

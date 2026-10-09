@@ -48,6 +48,16 @@
   {% if anchor.event_id %}
   <dl><dt>Event ID</dt><dd><code>{{ anchor.event_id }}</code></dd>
   <dt>Publisher</dt><dd><code>{{ anchor.publisher }}</code></dd></dl>
+  <dl>
+    <dt>Publication relay source</dt><dd>{{ publication_relay_source }}</dd>
+    <dt>Publication targets</dt><dd>{% for relay in anchor.target_relays %}<div><code>{{ relay }}</code></div>{% else %}Not reported{% endfor %}</dd>
+    <dt>Confirmed relay acceptance</dt><dd>{% for relay in anchor.relays %}<div><code>{{ relay }}</code></div>{% else %}No relay acceptance confirmed{% endfor %}</dd>
+    <dt>QR lookup relays</dt><dd>{% for relay in relays %}<div><code>{{ relay }}</code></div>{% endfor %}</dd>
+  </dl>
+  {% if relay_scope_mismatch %}
+  <p class="notice notice-error" role="alert">None of the relays that acknowledged this anchor are in the QR lookup scope. Add an acknowledged relay to OPENQR_RELAYS, or align the Acting Profile's publication relays. Artifact retrieval can succeed independently of anchor discovery.</p>
+  {% endif %}
+  <p class="field-note">Relay acceptance does not guarantee later retention or query visibility. Unconfirmed targets may still have received the event.</p>
   {% endif %}
 </section>
 {% endblock %}

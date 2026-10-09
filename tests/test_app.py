@@ -121,6 +121,27 @@ def test_register_artifact_accepts_campaign_id(publisher):
     assert "http://testserver/wine-2026/" in response.text
 
 
+@pytest.mark.parametrize("overlap", [True, False])
+def test_registration_displays_publication_and_query_scope(monkeypatch, publisher, overlap):
+    from app import main
+    target = "wss://publisher.example.org"
+    query = target if overlap else "wss://query.example.org"
+    monkeypatch.setattr(main, "DEFAULT_RELAYS", [query])
+    async def publish(artifact, **kwargs):
+        return {"published": True, "event_id": "a" * 64, "publisher": "test-publisher",
+                "message": "Accepted", "target_relays": [target, "wss://unconfirmed.example.org"],
+                "relays": [target]}
+    monkeypatch.setattr(main, "publish_anchor", publish)
+    response = post_form("/register", files={"file": ("test.txt", b"test", "text/plain")})
+    assert response.status_code == 200
+    assert "Publication targets" in response.text
+    assert "Confirmed relay acceptance" in response.text
+    assert "QR lookup relays" in response.text
+    assert target in response.text and query in response.text
+    assert "wss://unconfirmed.example.org" in response.text
+    assert ("None of the relays that acknowledged" in response.text) is not overlap
+
+
 def test_qr_image_is_png():
     response = client.get(
         "/qr/wine-2026/cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448"

@@ -24,17 +24,19 @@ async def publish_anchor(artifact: UploadedArtifact, *, signer_nsec: str, relays
         tags.extend([["blossom", server] for server in BlossomPool(blossom_servers).servers])
     event = Event(kind=1415, content=f"Registered Digital Artifact {artifact.filename}", tags=tags)
     event.sign(keys)
+    result = {"event_id": event.id, "publisher": keys.public_key_bech32(),
+              "target_relays": list(dict.fromkeys(relays)), "relays": []}
     try:
         acknowledgements = await asyncio.wait_for(
             RelayPool(relays, timeout=timeout).publish(event), timeout=timeout + 1,
         )
     except Exception:
-        return {"published": False, "event_id": event.id, "publisher": keys.public_key_bech32(),
+        return {**result, "published": False,
                 "message": "Publication was not confirmed. A relay may still have received the event; check the resolver before retrying."}
     if not any(ack.accepted for ack in acknowledgements):
-        return {"published": False, "event_id": event.id, "publisher": keys.public_key_bech32(),
-                "message": "No relay accepted the Anchor Record."}
-    return {"published": True, "event_id": event.id, "publisher": keys.public_key_bech32(),
+        return {**result, "published": False,
+                "message": "No relay acceptance was confirmed for the Anchor Record."}
+    return {**result, "published": True,
             "message": "Anchor Record accepted by a relay.",
             "relays": [ack.relay for ack in acknowledgements if ack.accepted]}
 

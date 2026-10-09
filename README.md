@@ -58,6 +58,16 @@ details appear below. Create/manage profiles in the OpenETR Control Desk or CLI.
 OpenQR checks membership and reloads the encrypted profile signer before each
 registration. Anchor publication uses the profile's configured relays (home
 relays when absent); public lookup uses `OPENQR_RELAYS`.
+Registration results show publication targets, relays that acknowledged the
+anchor, and the public QR lookup scope. A warning appears when no acknowledged
+relay overlaps the lookup scope. An accepted event is not proof of later
+retention or indexing. A timeout is unconfirmed, not proof of rejection.
+
+If a QR link finds the artifact but not the anchor, compare those relay lists.
+Blossom bytes can be retrieved independently of Nostr events. Include an
+acknowledged publication relay in `OPENQR_RELAYS`, or configure the Acting
+Profile to publish where the resolver queries. Changing `OPENQR_HOME_RELAYS`
+alone does not expand public lookup. No automatic republishing is performed.
 
 The app owns HTTP sessions and CSRF protection, while OpenETR owns identity
 record conventions and decryption. `app/identity.py` isolates the component's

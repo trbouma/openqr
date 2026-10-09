@@ -24,6 +24,8 @@
 <section class="summary-panel">
   <h2>Anchor Record</h2>
   <p>No matching Anchor Record was returned from the configured relays.</p>
+  <dl><dt>Queried relays</dt><dd>{% for relay in result.relays %}<div><code>{{ relay }}</code></div>{% endfor %}</dd></dl>
+  <p>Artifact storage and anchor publication are independent. Check the registration result's publication relays against this lookup scope.</p>
 </section>
 {% endfor %}
 {% endset %}
