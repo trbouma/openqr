@@ -14,8 +14,7 @@ from urllib.parse import quote
 
 import qrcode
 from fastapi import UploadFile
-from monstr.encrypt import Keys
-from monstr.event.event import Event
+from stroma import Event, Keys
 
 BLOSSOM_AUTH_KIND = 24242
 BLOSSOM_AUTH_TTL_SECONDS = 5 * 60

@@ -1,8 +1,7 @@
 import base64
 import json
 
-from monstr.encrypt import Keys
-from monstr.event.event import Event
+from stroma import Event, Keys
 
 from app.registration import blossom_auth_header, render_qr_png
 
@@ -19,8 +18,8 @@ def test_blossom_authorization_is_a_signed_nostr_event():
 
     assert scheme == "Nostr"
     assert event.kind == 24242
-    assert digest in event.get_tags_value("x")
-    assert "upload" in event.get_tags_value("t")
+    assert digest in event.tags.get_tags_value("x")
+    assert "upload" in event.tags.get_tags_value("t")
     assert event.is_valid()
 
 

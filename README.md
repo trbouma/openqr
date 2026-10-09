@@ -6,6 +6,12 @@ It accepts the SHA-256 digest carried by a conforming OpenETR QR URL, queries
 configured Nostr relays for kind `1415` Anchor Records carrying that digest in
 the `o` tag, and verifies the returned event identifiers and signatures.
 
+Nostr relay queries, keys, and event signing use
+[Stroma](https://github.com/trbouma/stroma). Poetry locks the Git dependency to
+a specific commit for reproducible installs and container builds. Stroma
+discards events with invalid identifiers or signatures during relay retrieval;
+OpenQR also checks the returned anchor's kind and artifact digest.
+
 OpenQR is deliberately read-only with respect to OpenETR evidence. It does not
 issue records, hold OpenETR issuer keys, manage visitor accounts, or determine
 whether evidence has legal or institutional effect. A separately configured
@@ -65,6 +71,15 @@ Set `OPENQR_PUBLIC_BASE_URL` to the production HTTPS origin before generating
 production QR codes. To enable the optional Blossom checkbox, provide a
 dedicated `OPENQR_BLOSSOM_NSEC`; OpenQR never displays this secret or asks a
 visitor to provide one.
+
+Generate a dedicated upload key locally with:
+
+```sh
+poetry run python -c "from stroma import Keys; print(Keys().private_key_bech32())"
+```
+
+Store the resulting secret as `OPENQR_BLOSSOM_NSEC` in `.env`. For local
+development, load that file with `poetry run uvicorn app.main:app --reload --env-file .env`.
 
 ## Docker Compose
 

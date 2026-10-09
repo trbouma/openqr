@@ -10,9 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from monstr.client.client import ClientPool
-from monstr.encrypt import Keys
-from monstr.event.event import Event
+from stroma import Event, Keys, RelayPool
 
 ANCHOR_KIND = 1415
 HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -181,7 +179,7 @@ def event_timestamp(event: Event) -> str:
 
 def event_to_evidence(event: Event, digest: str) -> AnchorEvidence:
     data = event.data()
-    o_values = event.get_tags_value("o")
+    o_values = event.tags.get_tags_value("o")
     return AnchorEvidence(
         event_id=event.id,
         publisher_hex=event.pub_key,
@@ -207,13 +205,7 @@ async def resolve_anchor_evidence(
     query_filter = {"kinds": [ANCHOR_KIND], "#o": [digest], "limit": limit}
 
     try:
-        async with ClientPool(relays, query_timeout=timeout, timeout=timeout) as client:
-            events = await client.query(
-                query_filter,
-                emulate_single=True,
-                wait_connect=True,
-                timeout=timeout,
-            )
+        events = await RelayPool(relays, timeout=timeout).query(query_filter)
     except Exception as exc:
         raise EvidenceRetrievalError(
             "The configured relay scope could not be queried. Try again shortly."
@@ -221,7 +213,7 @@ async def resolve_anchor_evidence(
 
     unique_events = {event.id: event for event in events}
     ordered = sorted(
-        unique_events.values(), key=lambda event: (event.created_at_ticks, event.id)
+        unique_events.values(), key=lambda event: (int(event.created_at), event.id)
     )
     return ResolutionResult(
         digest=digest,
