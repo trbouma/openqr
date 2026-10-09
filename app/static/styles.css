@@ -16,6 +16,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 .artifact-preview { min-width: 0; margin-top: 1rem; }
+.artifact-video { width: 100%; max-height: 75vh; aspect-ratio: 16 / 9; object-fit: contain; background: #000; }
 .artifact-image, .artifact-canvas { display: block; width: 100%; max-width: 58rem; height: auto; margin: 0 auto; background: white; }
 .pdf-controls { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .pdf-controls button { min-width: 2.8rem; }

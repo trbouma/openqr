@@ -91,3 +91,15 @@ def test_retrieval_passes_limits_and_deduplicates(monkeypatch):
 
 def test_qr_renderer_uses_png_output():
     assert module.render_qr_png("https://example.com/etr/" + artifact().digest).startswith(b"\x89PNG\r\n\x1a\n")
+
+
+@pytest.mark.parametrize("brand", [b"isom", b"mp42", b"M4V ", b"avc1"])
+def test_mp4_detection(brand):
+    assert module.preview_type(b"\x00\x00\x00\x18ftyp" + brand + b"\x00" * 4 + b"isommp42") == "video/mp4"
+
+
+@pytest.mark.parametrize("content", [b"ftypisom", b"\x00\x00\x00\x18ftypisom",
+                                   b"\x00\x00\x00\x10ftypavif" + b"\x00" * 4,
+                                   b"<html>fake.mp4</html>"])
+def test_non_mp4_detection(content):
+    assert module.preview_type(content) is None

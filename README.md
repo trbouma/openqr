@@ -188,6 +188,24 @@ rebuilds and recreates the service, and waits for `/health` to report success.
 ```sh
 poetry run pytest
 ```
+## MP4 playback
+
+Artifact resolution previews recognized MP4 containers in a native browser video
+player with playback, seeking, volume, and fullscreen controls. Playback does not
+autostart. Browser codec support still applies; H.264 video with AAC audio is a
+practical interoperability choice. OpenQR does not transcode or change the artifact.
+
+The preview endpoint serves `video/mp4` and supports single byte-range requests.
+The entire file is fetched and SHA-256 verified before any range is returned.
+There is no persistent artifact cache, so preview and seeking requests can cause
+repeat full retrievals. Large files require sufficient memory and retrieval time;
+this is verified-file playback, not a streaming CDN.
+
+Set `OPENQR_MAX_UPLOAD_BYTES` and the reverse proxy body limit to accommodate the
+file. For slow servers, review `OPENQR_BLOSSOM_TIMEOUT_SECONDS` and
+`OPENQR_BLOSSOM_OPERATION_TIMEOUT_SECONDS`. The same artifact size limit applies
+to retrieval. Unsupported containers/codecs retain the download option.
+
 ## GS1 Digital Link integration
 
 Registration optionally accepts a GTIN, batch/lot (AI 10), and serial number

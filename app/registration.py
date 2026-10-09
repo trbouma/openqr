@@ -62,6 +62,13 @@ async def retrieve_artifact(digest: str, **options) -> dict:
 
 
 def preview_type(content: bytes) -> str | None:
+    # Recognize MP4's file-type box, not just the untrusted filename/MIME hint.
+    if len(content) >= 16 and content[4:8] == b"ftyp":
+        box_size = int.from_bytes(content[:4], "big")
+        if (16 <= box_size <= len(content) and box_size % 4 == 0
+                and content[8:12] in {b"isom", b"iso2", b"iso3", b"iso4", b"iso5", b"iso6",
+                                      b"mp41", b"mp42", b"avc1", b"M4V ", b"dash"}):
+            return "video/mp4"
     if content.startswith(b"%PDF-"):
         return "application/pdf"
     if content.startswith(b"\x89PNG\r\n\x1a\n"):

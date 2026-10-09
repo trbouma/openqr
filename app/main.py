@@ -334,7 +334,7 @@ async def resolve_input(reference: str = Query(..., min_length=1)):
 
 
 @app.get("/artifact/{campaign_id}/{reference}")
-async def download_artifact(campaign_id: str, reference: str, preview: bool = False):
+async def download_artifact(request: Request, campaign_id: str, reference: str, preview: bool = False):
     try:
         _, digest, _ = normalize_lookup(reference)
     except InvalidResolutionReference as exc:
@@ -352,10 +352,30 @@ async def download_artifact(campaign_id: str, reference: str, preview: bool = Fa
     media_type = preview_type(content) if preview else None
     if preview and not media_type:
         raise HTTPException(415, "No preview is available for this file type.")
-    return Response(content, media_type=media_type or "application/octet-stream", headers={
+    headers = {
         "Content-Disposition": f'{"inline" if preview else "attachment"}; filename="{digest}"',
         "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
-    })
+    }
+    if media_type == "video/mp4":
+        headers["Accept-Ranges"] = "bytes"
+        requested_range = request.headers.get("range")
+        if requested_range:
+            # Range slicing only happens after BlossomPool verifies the full digest.
+            match = re.fullmatch(r"bytes=([0-9]{0,20})-([0-9]{0,20})", requested_range.strip())
+            size = len(content)
+            start, end = 0, -1
+            if match and any(match.groups()):
+                first, last = match.groups()
+                if first:
+                    start = int(first)
+                    end = min(int(last), size - 1) if last else size - 1
+                elif int(last) > 0:
+                    start, end = max(0, size - int(last)), size - 1
+            if not (0 <= start <= end < size):
+                return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
+            headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+            return Response(content[start:end + 1], status_code=206, media_type=media_type, headers=headers)
+    return Response(content, media_type=media_type or "application/octet-stream", headers=headers)
 
 
 @app.get("/gs1/qr/01/{gs1_path:path}")

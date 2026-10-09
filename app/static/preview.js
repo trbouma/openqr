@@ -10,6 +10,19 @@ if (panel) {
   const url = panel.dataset.mediaUrl;
 
   async function preview() {
+    if (panel.dataset.mediaType === 'video/mp4') {
+      const video = panel.querySelector('video');
+      video.addEventListener('loadedmetadata', () => { status.textContent = ''; });
+      video.addEventListener('waiting', () => { status.textContent = 'Loading video. Please wait...'; });
+      video.addEventListener('playing', () => { status.textContent = ''; });
+      video.addEventListener('canplay', () => { status.textContent = ''; });
+      video.addEventListener('error', () => {
+        status.textContent = 'Video preview unavailable or codec unsupported. You can download the artifact below.';
+      });
+      video.src = url;
+      video.hidden = false;
+      return;
+    }
     if (panel.dataset.mediaType.startsWith('image/')) {
       image.onload = () => { status.textContent = ''; };
       image.onerror = () => {

@@ -268,3 +268,31 @@ def test_invalid_gs1_does_not_publish(publisher, monkeypatch, fields):
                                  "/gs1/qr/01/09520123456788?digest=no"])
 def test_invalid_gs1_routes(path):
     assert client.get(path).status_code == 400
+
+
+def test_mp4_preview_and_verified_ranges(monkeypatch):
+    content = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 4 + b"isommp42" + b"video test data"
+    digest = hashlib.sha256(content).hexdigest()
+    mock_blob(monkeypatch, content)
+    path = f"/artifact/etr/{digest}?preview=true"
+    response = client.get(path)
+    assert response.status_code == 200
+    assert response.content == content
+    assert response.headers["content-type"] == "video/mp4"
+    assert response.headers["accept-ranges"] == "bytes"
+    page = client.get(f"/etr/{digest}")
+    assert 'data-media-type="video/mp4"' in page.text
+    assert 'controls playsinline preload="metadata"' in page.text
+    for header, start, end in [("bytes=0-1", 0, 1), ("bytes=10-", 10, len(content)-1),
+                                ("bytes=-8", len(content)-8, len(content)-1),
+                                ("bytes=0-999", 0, len(content)-1)]:
+        response = client.get(path, headers={"Range": header})
+        assert response.status_code == 206
+        assert response.content == content[start:end+1]
+        assert response.headers["content-range"] == f"bytes {start}-{end}/{len(content)}"
+    for header in ["bytes=999-", "bytes=10-1", "bytes=-0", "bytes=-", "bytes=0-1,4-5", "nonsense"]:
+        response = client.get(path, headers={"Range": header})
+        assert response.status_code == 416
+        assert response.headers["content-range"] == f"bytes */{len(content)}"
+    mock_blob(monkeypatch, b"wrong bytes")
+    assert client.get(path, headers={"Range": "bytes=0-1"}).status_code == 502
