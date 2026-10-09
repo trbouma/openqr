@@ -14,6 +14,10 @@
     <dt>Published</dt><dd>{{ anchor.created_at }}</dd>
     <dt>SHA-256 digest</dt><dd><code>{{ result.digest }}</code></dd>
     {% if anchor.content %}<dt>Statement</dt><dd>{{ anchor.content }}</dd>{% endif %}
+    <dt>Blossom hints</dt>
+    <dd>{% for server in anchor.blossom_servers %}
+      <div><a href="{{ server }}" target="_blank" rel="noopener noreferrer" title="Retrieval hint; current availability is not guaranteed">{{ server }}</a></div>
+    {% else %}No usable Blossom hints advertised.{% endfor %}</dd>
   </dl>
 </article>
 {% else %}

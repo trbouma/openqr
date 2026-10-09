@@ -64,7 +64,10 @@ form[aria-busy="true"] button:disabled { opacity: .65; cursor: wait; }
 @keyframes progress-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .progress-spinner { animation: none; } }
 label { font-size: .88rem; font-weight: 700; }
-input { width: 100%; min-height: 3.2rem; padding: .72rem .85rem; border: 1px solid var(--border); border-radius: 6px; outline: none; background: #08172a; color: var(--text); font: inherit; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+input, select { width: 100%; min-height: 3.2rem; padding: .72rem .85rem; border: 1px solid var(--border); border-radius: 6px; outline: none; background: #08172a; color: var(--text); font: inherit; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+fieldset:disabled { opacity: .55; }
+dd a { overflow-wrap: anywhere; }
 input[type="file"] { min-height: auto; padding: .7rem; }
 input[type="checkbox"] { width: 1.1rem; min-height: 1.1rem; margin: .15rem 0 0; accent-color: var(--accent-strong); }
 input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(120 151 255 / 16%); }

@@ -12,21 +12,72 @@ a specific commit for reproducible installs and container builds. Stroma
 discards events with invalid identifiers or signatures during relay retrieval;
 OpenQR also checks the returned anchor's kind and artifact digest.
 
-OpenQR signs and publishes Anchor Records using a deployment key. It does not
-manage visitor accounts or determine whether evidence has legal or institutional
-effect. The publisher identifies the deployment, not the visitor uploading a file.
+OpenQR uses the installable [OpenETR component](https://github.com/trbouma/openetr)
+for relay-backed Control Desk identities and profile signer records. Registration
+defaults to interactive mode: sign in with an existing Control Desk Key, select
+an Acting Profile, then register an artifact. The profile signs the anchor and
+authorizes any requested Blossom storage. QR lookup remains public.
+OpenQR does not determine recognition, legal identity, or institutional effect.
 
 The `/register` surface accepts a Digital Artifact, calculates its SHA-256
 digest, publishes a signed kind `1415` Anchor Record, and creates a compact
-resolver QR. Blossom storage is selected by default and can be deselected.
+resolver QR. Blossom storage is opt-in.
 The result reports storage and relay acknowledgement separately. Unconfirmed
 publication may still have reached a relay; check the resolver before retrying.
 
-Opening a resolver link retrieves the artifact from the configured Blossom
-server and verifies its SHA-256 digest. Verified bytes can be downloaded through
+Opening a resolver link combines verified anchor Blossom hints, configured query
+servers, and upload servers in one Stroma BlossomPool. Origins are normalized and
+deduplicated; requests run concurrently and the first digest-verified copy wins.
+This is not sequential fallback. Verified bytes can be downloaded through
 `/artifact/{campaign_id}/{digest}`; the download rechecks the digest. Missing,
 oversized, or mismatched artifacts are reported without hiding retrieved anchor
 evidence. The JSON resolver includes artifact retrieval status.
+
+New anchors include repeated `["blossom", "https://server.example.org"]` tags
+only for servers confirmed by digest-verified readback before signing. Existing
+anchors without hints remain resolvable through configured servers. Hints are
+displayed with the anchor and do not guarantee current availability.
+
+Uploads go only to `OPENQR_BLOSSOM_SERVERS`; query servers and anchor hints never
+become upload destinations. All configured upload servers are attempted.
+`OPENQR_BLOSSOM_REQUIRE` controls confirmation: `any` (one, default),
+`half` (ceil(N/2)), `majority` (floor(N/2)+1), or `all` (N), counting unique
+origins including failed targets. An unmet requirement stops anchor publication;
+some copies may already exist. Retry checks existing bytes before uploading.
+Each configured pool and the hint list is limited to 32 origins; the combined
+retrieval pool supports up to 96 unique origins, four concurrent requests, and
+an overall deadline. Public HTTPS is required; private destinations and redirects
+are blocked by Stroma.
+
+## Registration Identity
+
+On `/register`, sign in with an existing OpenETR Control Desk nsec. Set
+`OPENQR_HOME_RELAYS` to the relays holding that root's encrypted profile records.
+Select an Acting Profile from the name-only dropdown; its public key and profile
+details appear below. Create/manage profiles in the OpenETR Control Desk or CLI.
+OpenQR checks membership and reloads the encrypted profile signer before each
+registration. Anchor publication uses the profile's configured relays (home
+relays when absent); public lookup uses `OPENQR_RELAYS`.
+
+The app owns HTTP sessions and CSRF protection, while OpenETR owns identity
+record conventions and decryption. `app/identity.py` isolates the component's
+current internal async configuration APIs; it never imports the OpenETR web app
+or reads/writes local user configuration. Those adapter imports should be checked
+when updating OpenETR until a stable public identity facade is available.
+
+The server handles the submitted nsec: this is a trusted-server key-custody model,
+not a browser-only signer. Secrets are never rendered back into HTML. Sessions
+are encrypted, HTTP-only cookies with SameSite protection and an eight-hour
+expiry. Every state-changing form requires a CSRF token. Use HTTPS and a stable,
+high-entropy `OPENQR_SESSION_SECRET` shared by all workers. Do not log request
+bodies. Sign-out clears the browser cookie; it cannot revoke a previously stolen
+cookie. Rotating the deployment session secret invalidates all sessions.
+
+Service registration must be explicitly enabled using
+`OPENQR_REGISTRATION_MODE=service`. Only that mode uses deployment signing keys;
+there is no silent fallback in interactive mode. Protect service-mode registration
+with your reverse proxy's authentication/access policy because visitors can
+otherwise cause the deployment key to sign records.
 
 Resolver pages render PDF documents with page controls using the same bundled
 PDF.js viewer as OpenETR, and display PNG, JPEG, GIF, and WebP images inline.
@@ -72,8 +123,17 @@ http://127.0.0.1:8000/wine-2026/cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448
 | `OPENQR_PUBLIC_BASE_URL` | Request origin | Public origin encoded in generated QR links |
 | `OPENQR_MAX_UPLOAD_BYTES` | `26214400` | Maximum registration upload size |
 | `OPENQR_BLOSSOM_SERVER` | `https://blossom.getsafebox.app` | Default artifact storage server |
-| `OPENQR_BLOSSOM_NSEC` | unset | Blossom upload key and fallback anchor signing key |
-| `OPENQR_SIGNER_NSEC` | `OPENQR_BLOSSOM_NSEC` | Anchor signing key; also authorizes storage when no separate Blossom key is set |
+| `OPENQR_BLOSSOM_SERVERS` | Single-server setting | Comma/whitespace-separated upload origins |
+| `OPENQR_BLOSSOM_QUERY_SERVERS` | Upload pool | Additional retrieval origins |
+| `OPENQR_BLOSSOM_REQUIRE` | `any` | Upload confirmation requirement |
+| `OPENQR_BLOSSOM_OPERATION_TIMEOUT_SECONDS` | `60` | Overall storage/retrieval deadline |
+| `OPENQR_REGISTRATION_MODE` | `interactive` | Interactive profiles or explicit `service` mode |
+| `OPENQR_HOME_RELAYS` | `OPENQR_RELAYS` | Relay-backed Control Desk configuration scope |
+| `OPENQR_SESSION_SECRET` | Ephemeral development secret | Required stable encryption secret in Compose |
+| `OPENQR_SESSION_SECURE` | HTTPS public URL detection | Secure cookies; Compose defaults to `true` |
+| `OPENQR_REQUIRE_SESSION_SECRET` | `false` | Fail startup without secret; Compose sets `true` |
+| `OPENQR_BLOSSOM_NSEC` | unset | Service-mode storage key and fallback anchor signer |
+| `OPENQR_SIGNER_NSEC` | `OPENQR_BLOSSOM_NSEC` | Service-mode anchor signer |
 | `OPENQR_BLOSSOM_TIMEOUT_SECONDS` | `20` | Blossom request timeout |
 | `OPENQR_BIND_ADDRESS` | `127.0.0.1` | Docker host bind address |
 | `OPENQR_PORT` | `8000` | Docker host port |
@@ -81,19 +141,21 @@ http://127.0.0.1:8000/wine-2026/cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448
 Copy `.env.example` to `.env` to customize Docker Compose settings.
 
 Set `OPENQR_PUBLIC_BASE_URL` to the production HTTPS origin before generating
-production QR codes. To enable the optional Blossom checkbox, provide a
-deployment key in `OPENQR_BLOSSOM_NSEC`; it also signs anchors unless
-`OPENQR_SIGNER_NSEC` is set. Existing deployments can continue using their
-configured key. OpenQR never displays the secret or asks visitors to provide one.
+production QR codes. Generate the session secret with `openssl rand -hex 32`.
+Existing deployment keys are ignored unless you explicitly choose service mode.
+Interactive users sign in with their existing OpenETR root and select a profile.
 
-Generate a dedicated upload key locally with:
+For explicit service mode, generate a dedicated key locally with:
 
 ```sh
 poetry run python -c "from stroma import Keys; print(Keys().private_key_bech32())"
 ```
 
-Store the resulting secret as `OPENQR_BLOSSOM_NSEC` in `.env`. For local
-development, load that file with `poetry run uvicorn app.main:app --reload --env-file .env`.
+Store the resulting secret as `OPENQR_BLOSSOM_NSEC` in `.env` and explicitly set
+`OPENQR_REGISTRATION_MODE=service`. For local development, load the file with
+`poetry run uvicorn app.main:app --reload --env-file .env`.
+When testing on HTTP localhost, set `OPENQR_SESSION_SECURE=false`; retain
+`true` behind your HTTPS reverse proxy.
 
 ## Docker Compose
 

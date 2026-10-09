@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from stroma import Event, Keys, RelayPool
+from stroma import BlossomPool, Event, Keys, RelayPool
 
 ANCHOR_KIND = 1415
 HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -43,7 +43,25 @@ class AnchorEvidence:
         return self.structure_valid and self.signature_valid and self.event_id_valid
 
     def to_dict(self) -> dict[str, Any]:
-        return {**asdict(self), "verified": self.verified}
+        return {**asdict(self), "verified": self.verified, "blossom_servers": self.blossom_servers}
+
+    @property
+    def blossom_servers(self) -> list[str]:
+        servers = []
+        if not self.verified or ["action", "issue"] not in self.tags:
+            return servers
+        for tag in self.tags:
+            if len(tag) != 2 or tag[0] != "blossom":
+                continue
+            try:
+                server = BlossomPool([tag[1]]).servers[0]
+            except ValueError:
+                continue
+            if server not in servers:
+                servers.append(server)
+            if len(servers) == 32:
+                break
+        return servers
 
 
 @dataclass(frozen=True)

@@ -1,19 +1,20 @@
-import base64
-import json
 import asyncio
 import hashlib
-import io
-import pytest
 from types import SimpleNamespace
 
-from stroma import Event, Keys
+import pytest
+from stroma import BlossomError, BlossomPool, BlossomOutcome, BlossomStoreResult, Keys
 
-from app.registration import blossom_auth_header, render_qr_png
+from app import registration as module
 
 
-def test_anchor_publishing_requires_acknowledgement(monkeypatch):
-    from app import registration as module
-    artifact = module.UploadedArtifact("test.txt", "text/plain", 4, hashlib.sha256(b"test").hexdigest(), b"test")
+def artifact():
+    content = b"test artifact"
+    return module.UploadedArtifact("test.txt", "text/plain", len(content), hashlib.sha256(content).hexdigest(), content)
+
+
+def test_anchor_publishing_requires_acknowledgement_and_signs_hints(monkeypatch):
+    item = artifact()
     keys = Keys()
     class Pool:
         def __init__(self, relays, **kwargs):
@@ -21,100 +22,67 @@ def test_anchor_publishing_requires_acknowledgement(monkeypatch):
         async def publish(self, event):
             assert event.is_valid()
             assert event.kind == 1415
-            assert event.tags.get_tags_value("o") == [artifact.digest]
+            assert event.tags.get_tags_value("o") == [item.digest]
             assert event.tags.get_tags_value("action") == ["issue"]
+            assert event.tags.get_tags_value("blossom") == ["https://example.com"]
             return [SimpleNamespace(accepted=True, relay=self.relays[0])]
     monkeypatch.setattr(module, "RelayPool", Pool)
-    result = asyncio.run(module.publish_anchor(artifact, signer_nsec=keys.private_key_bech32(), relays=["wss://example.com"], timeout=1))
-    assert result["published"]
+    options = dict(signer_nsec=keys.private_key_bech32(), relays=["wss://example.com"], timeout=1,
+                   blossom_servers=["https://example.com/", "https://EXAMPLE.com:443"])
+    assert asyncio.run(module.publish_anchor(item, **options))["published"]
+    async def rejected(self, event):
+        return []
+    monkeypatch.setattr(Pool, "publish", rejected)
+    assert not asyncio.run(module.publish_anchor(item, **options))["published"]
     async def failed(self, event):
         raise TimeoutError()
     monkeypatch.setattr(Pool, "publish", failed)
-    result = asyncio.run(module.publish_anchor(artifact, signer_nsec=keys.private_key_bech32(), relays=["wss://example.com"], timeout=1))
-    assert not result["published"]
-    assert result["event_id"]
+    result = asyncio.run(module.publish_anchor(item, **options))
+    assert not result["published"] and result["event_id"]
 
 
-def test_artifact_retrieval_checks_bytes_and_size(monkeypatch):
-    from app import registration as module
-    content = b"test artifact"
-    digest = hashlib.sha256(content).hexdigest()
-    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(content))
-    kwargs = dict(server="https://example.com", timeout=1, max_bytes=100)
-    assert module.fetch_artifact(digest, **kwargs) == content
-    with pytest.raises(ValueError, match="verification failed"):
-        module.fetch_artifact("0" * 64, **kwargs)
-    with pytest.raises(ValueError, match="size limit"):
-        module.fetch_artifact(digest, **{**kwargs, "max_bytes": 2})
+@pytest.mark.parametrize("require,required", [("any", 1), ("half", 1), ("majority", 2), ("all", 2)])
+def test_storage_thresholds_and_confirmed_locations(monkeypatch, require, required):
+    item = artifact()
+    seen = {}
+    async def store(pool, content, **kwargs):
+        seen.update(kwargs)
+        assert pool.servers == ("https://one.example.org", "https://two.example.org")
+        assert content == item.content
+        return BlossomStoreResult(item.digest, require, required, (
+            BlossomOutcome(pool.servers[0], "confirmed"),
+            BlossomOutcome(pool.servers[1], "unconfirmed", "Timeout"),
+        ))
+    monkeypatch.setattr(BlossomPool, "store", store)
+    result = asyncio.run(module.maybe_upload_to_blossom(
+        item, requested=True, servers=["https://one.example.org", "https://two.example.org"],
+        signer_nsec=Keys().private_key_bech32(), timeout=1, max_bytes=100, require=require,
+    ))
+    assert result["stored"] is (required == 1)
+    assert result["confirmed_servers"] == ["https://one.example.org"]
+    assert seen["require"] == require
+    assert seen["signer"].private_key_hex()
 
 
-def test_blossom_authorization_is_a_signed_nostr_event():
-    keys = Keys()
-    digest = "72f268d79dc36412a21d046cc2124b9ca02aab3c712eb23e67fd96d86a38e38f"
-    header = blossom_auth_header(
-        signer_nsec=keys.private_key_bech32(),
-        digest=digest,
-    )
-    scheme, encoded = header.split(" ", 1)
-    event = Event.load(json.loads(base64.b64decode(encoded)))
+def test_optional_storage_and_failure(monkeypatch):
+    async def fail(*args, **kwargs):
+        raise BlossomError("timeout")
+    monkeypatch.setattr(BlossomPool, "store", fail)
+    options = dict(servers=["https://example.com"], signer_nsec=Keys().private_key_bech32(), timeout=1, max_bytes=100)
+    assert asyncio.run(module.maybe_upload_to_blossom(artifact(), requested=False, **options)) is None
+    assert not asyncio.run(module.maybe_upload_to_blossom(artifact(), requested=True, **options))["stored"]
 
-    assert scheme == "Nostr"
-    assert event.kind == 24242
-    assert digest in event.tags.get_tags_value("x")
-    assert "upload" in event.tags.get_tags_value("t")
-    assert event.is_valid()
+
+def test_retrieval_passes_limits_and_deduplicates(monkeypatch):
+    async def retrieve(pool, digest):
+        assert pool.servers == ("https://example.com",)
+        assert pool.max_bytes == 100
+        assert pool.operation_timeout == 2
+        raise BlossomError("No verified copy")
+    monkeypatch.setattr(BlossomPool, "retrieve", retrieve)
+    result = asyncio.run(module.retrieve_artifact(artifact().digest, servers=["https://example.com/", "https://EXAMPLE.com:443"], timeout=1, operation_timeout=2, max_bytes=100))
+    assert not result["verified"]
 
 
 def test_qr_renderer_uses_png_output():
-    image = render_qr_png(
-        "https://example.com/etr/cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448"
-    )
-    assert image.startswith(b"\x89PNG\r\n\x1a\n")
-
-
-@pytest.mark.parametrize("failure", ["preflight", "upload", "confirmation", "missing", "unavailable", "wrong_bytes", "none"])
-def test_blossom_upload_recovers_without_republishing(monkeypatch, failure):
-    from app import registration as module
-
-    content = b"test artifact"
-    artifact = module.UploadedArtifact("test.txt", "text/plain", len(content), hashlib.sha256(content).hexdigest(), content)
-    calls = []
-
-    class Response(io.BytesIO):
-        status = 200
-
-        def read(self, *args):
-            if calls[-1] == "PUT":
-                raise AssertionError("Upload descriptor must not be read")
-            return super().read(*args)
-
-    def urlopen(request, **kwargs):
-        method = request.get_method()
-        calls.append(method)
-        if method == "HEAD":
-            if len(calls) == 1:
-                if failure == "preflight":
-                    raise TimeoutError("preflight timed out")
-                raise module.urllib.error.HTTPError(request.full_url, 404, "Not found", {}, None)
-            if failure in {"confirmation", "unavailable", "wrong_bytes"}:
-                raise TimeoutError("confirmation timed out")
-            if failure == "missing":
-                raise module.urllib.error.HTTPError(request.full_url, 404, "Not found", {}, None)
-        if method == "PUT" and failure == "upload":
-            raise module.urllib.error.URLError(TimeoutError("upload timed out"))
-        if method == "GET":
-            assert kwargs["timeout"] <= 5
-            if failure == "unavailable":
-                raise TimeoutError("retrieval timed out")
-            return Response(b"incorrect" if failure == "wrong_bytes" else content)
-        return Response()
-
-    monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
-    result = module.upload_to_blossom(artifact, server="https://example.com", signer_nsec=Keys().private_key_bech32(), timeout=20)
-    assert calls.count("PUT") == 1
-    if failure in {"unavailable", "wrong_bytes"}:
-        assert result["stored"] is None
-        assert "could not be confirmed" in result["message"]
-    else:
-        assert result["stored"] is True
-    assert result["url"].endswith(artifact.digest)
+    assert module.render_qr_png("https://example.com/etr/" + artifact().digest).startswith(b"\x89PNG\r\n\x1a\n")

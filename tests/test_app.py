@@ -1,16 +1,46 @@
 from fastapi.testclient import TestClient
 import hashlib
+import re
 import pytest
+from stroma import BlossomError, BlossomRetrievalResult
 
 from app.main import app
 
 client = TestClient(app)
 
 
+def post_form(path, **kwargs):
+    page = client.get("/register")
+    token = re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
+    data = kwargs.pop("data", {})
+    return client.post(path, data={"csrf": token, **data}, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def isolate(monkeypatch):
+    from app import main
+    from app.resolver import ResolutionResult, normalize_digest
+    client.cookies.clear()
+    async def lookup(campaign, reference):
+        digest, encoding = normalize_digest(reference)
+        return ResolutionResult(digest, encoding, ["wss://example.com"], "2026-01-01T00:00:00Z", [])
+    monkeypatch.setattr(main, "perform_lookup", lookup)
+
+
+def mock_blob(monkeypatch, content):
+    from app import registration
+    async def retrieve(pool, digest):
+        if hashlib.sha256(content).hexdigest() != digest:
+            raise BlossomError("Digest mismatch")
+        return BlossomRetrievalResult(digest, content, pool.servers[0], "application/octet-stream")
+    monkeypatch.setattr(registration.BlossomPool, "retrieve", retrieve)
+
+
 @pytest.fixture
 def publisher(monkeypatch):
     from app import main
     monkeypatch.setattr(main, "SIGNER_NSEC", "test-key")
+    monkeypatch.setattr(main, "REGISTRATION_MODE", "service")
     async def publish(artifact, **kwargs):
         return {"published": True, "event_id": "a" * 64, "publisher": "test-publisher", "message": "Anchor Record accepted by a relay."}
     monkeypatch.setattr(main, "publish_anchor", publish)
@@ -71,7 +101,7 @@ def test_form_preserves_campaign_path_from_url():
 def test_register_artifact_uses_default_campaign(publisher):
     content = b"OpenQR registration test"
     digest = hashlib.sha256(content).hexdigest()
-    response = client.post(
+    response = post_form(
         "/register",
         files={"file": ("artifact.txt", content, "text/plain")},
     )
@@ -82,7 +112,7 @@ def test_register_artifact_uses_default_campaign(publisher):
 
 
 def test_register_artifact_accepts_campaign_id(publisher):
-    response = client.post(
+    response = post_form(
         "/register",
         data={"campaign_id": "wine-2026"},
         files={"file": ("artifact.txt", b"wine", "text/plain")},
@@ -109,7 +139,7 @@ def test_resolver_retrieves_artifact_and_downloads_verified_bytes(monkeypatch):
     async def lookup(*args):
         return ResolutionResult(digest, "hex", ["wss://example.com"], "2026-01-01T00:00:00Z", [])
     monkeypatch.setattr(main, "perform_lookup", lookup)
-    monkeypatch.setattr(registration.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(content))
+    mock_blob(monkeypatch, content)
     response = client.get(f"/campaign/{digest}")
     assert response.status_code == 200
     assert "Download verified artifact" in response.text
@@ -117,7 +147,7 @@ def test_resolver_retrieves_artifact_and_downloads_verified_bytes(monkeypatch):
     response = client.get(f"/artifact/campaign/{digest}")
     assert response.content == content
     assert response.headers["content-disposition"].startswith("attachment;")
-    monkeypatch.setattr(registration.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(b"wrong bytes"))
+    mock_blob(monkeypatch, b"wrong bytes")
     assert client.get(f"/artifact/campaign/{digest}").status_code == 502
     assert "Download verified artifact" not in client.get(f"/campaign/{digest}").text
 
@@ -125,7 +155,8 @@ def test_resolver_retrieves_artifact_and_downloads_verified_bytes(monkeypatch):
 def test_registration_requires_signing_configuration(monkeypatch):
     from app import main
     monkeypatch.setattr(main, "SIGNER_NSEC", None)
-    response = client.post("/register", files={"file": ("test.txt", b"test", "text/plain")})
+    monkeypatch.setattr(main, "REGISTRATION_MODE", "service")
+    response = post_form("/register", files={"file": ("test.txt", b"test", "text/plain")})
     assert response.status_code == 503
 
 
@@ -134,7 +165,7 @@ def test_verified_preview_response(monkeypatch, content, media_type):
     import io
     from app import registration
     digest = hashlib.sha256(content).hexdigest()
-    monkeypatch.setattr(registration.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(content))
+    mock_blob(monkeypatch, content)
     response = client.get(f"/artifact/etr/{digest}?preview=true")
     assert response.status_code == 200
     assert response.headers["content-type"] == media_type
@@ -148,6 +179,6 @@ def test_active_content_is_download_only(monkeypatch):
     from app import registration
     content = b"<svg onload='alert(1)'></svg>"
     digest = hashlib.sha256(content).hexdigest()
-    monkeypatch.setattr(registration.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(content))
+    mock_blob(monkeypatch, content)
     assert client.get(f"/artifact/etr/{digest}?preview=true").status_code == 415
     assert client.get(f"/artifact/etr/{digest}").status_code == 200

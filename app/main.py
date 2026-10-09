@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import base64
-import asyncio
 import os
 import re
+import secrets
 from pathlib import Path
 from urllib.parse import quote
 
@@ -11,6 +11,10 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from stroma import BlossomPool, storage_threshold
+
+from app import identity
+from app.session import EncryptedSessionMiddleware, check_csrf, csrf_token
 
 from app.resolver import (
     EvidenceRetrievalError,
@@ -48,6 +52,21 @@ BLOSSOM_SERVER = os.getenv(
 BLOSSOM_NSEC = os.getenv("OPENQR_BLOSSOM_NSEC") or None
 SIGNER_NSEC = os.getenv("OPENQR_SIGNER_NSEC") or BLOSSOM_NSEC
 BLOSSOM_TIMEOUT = float(os.getenv("OPENQR_BLOSSOM_TIMEOUT_SECONDS", "20"))
+BLOSSOM_OPERATION_TIMEOUT = float(os.getenv("OPENQR_BLOSSOM_OPERATION_TIMEOUT_SECONDS", "60"))
+BLOSSOM_SERVERS = list(BlossomPool(re.split(r"[,\s]+", (os.getenv("OPENQR_BLOSSOM_SERVERS") or BLOSSOM_SERVER).strip())).servers)
+BLOSSOM_QUERY_SERVERS = list(BlossomPool(re.split(r"[,\s]+", (os.getenv("OPENQR_BLOSSOM_QUERY_SERVERS") or ",".join(BLOSSOM_SERVERS)).strip())).servers)
+BLOSSOM_REQUIRE = os.getenv("OPENQR_BLOSSOM_REQUIRE", "any")
+storage_threshold(len(BLOSSOM_SERVERS), BLOSSOM_REQUIRE)
+HOME_RELAYS = [value for value in re.split(r"[,\s]+", os.getenv("OPENQR_HOME_RELAYS", ",".join(DEFAULT_RELAYS)).strip()) if value]
+REGISTRATION_MODE = os.getenv("OPENQR_REGISTRATION_MODE", "interactive")
+if REGISTRATION_MODE not in {"interactive", "service"}:
+    raise ValueError("OPENQR_REGISTRATION_MODE must be interactive or service")
+SESSION_SECRET = os.getenv("OPENQR_SESSION_SECRET")
+if not SESSION_SECRET:
+    if os.getenv("OPENQR_REQUIRE_SESSION_SECRET", "false").lower() == "true":
+        raise RuntimeError("OPENQR_SESSION_SECRET is required.")
+    SESSION_SECRET = secrets.token_urlsafe(32)
+SESSION_SECURE = os.getenv("OPENQR_SESSION_SECURE", str(PUBLIC_BASE_URL.startswith("https://"))).lower() == "true"
 CAMPAIGN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 app = FastAPI(
@@ -55,6 +74,7 @@ app = FastAPI(
     description="Minimal resolver for the OpenETR QR Resolver Profile 1.0",
     version="0.1.0",
 )
+app.add_middleware(EncryptedSessionMiddleware, secret=SESSION_SECRET, secure=SESSION_SECURE)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
@@ -65,11 +85,87 @@ def template_context(request: Request, **values):
         "relays": DEFAULT_RELAYS,
         "git_commit": GIT_COMMIT,
         "blossom_server": BLOSSOM_SERVER,
-        "blossom_upload_available": bool(BLOSSOM_NSEC or SIGNER_NSEC),
+        "blossom_servers": BLOSSOM_SERVERS,
+        "registration_mode": REGISTRATION_MODE,
+        "signed_in": bool(request.session.get("root_nsec")),
+        "acting_profile": request.session.get("profile"),
+        "acting_npub": request.session.get("profile_npub"),
+        "csrf_token": csrf_token(request) if request.url.path in {"/register", "/login", "/profiles/use"} else "",
         "max_upload_bytes": MAX_UPLOAD_BYTES,
         **values,
     }
 
+
+async def registration_page(request: Request, *, status_code=200, **values):
+    profiles, details = [], {}
+    if request.session.get("root_nsec"):
+        try:
+            profiles = await identity.list_profiles(request.session["root_nsec"], HOME_RELAYS)
+            if request.session.get("profile") in profiles:
+                profile = await identity.acting_profile(request.session["root_nsec"], request.session["profile"], HOME_RELAYS)
+                details = await identity.profile_details(profile)
+                request.session["profile_npub"] = profile["npub"]
+            elif request.session.get("profile"):
+                request.session.pop("profile", None)
+                request.session.pop("profile_npub", None)
+        except Exception:
+            values.setdefault("error_message", "Profile information could not be retrieved. Check the configured home relays.")
+    return templates.TemplateResponse(request, "register.html", template_context(
+        request, profiles=profiles, profile_details=details, **values,
+    ), status_code=status_code)
+
+
+def artifact_options(result: ResolutionResult | None = None) -> dict:
+    hints = []
+    for anchor in result.anchors if result else []:
+        if [tag[1] for tag in anchor.tags if len(tag) >= 2 and tag[0] == "o"] != [result.digest]:
+            continue
+        for server in anchor.blossom_servers:
+            if server not in hints and len(hints) < 32:
+                hints.append(server)
+    return dict(servers=[*hints, *BLOSSOM_QUERY_SERVERS, *BLOSSOM_SERVERS],
+                timeout=BLOSSOM_TIMEOUT, operation_timeout=BLOSSOM_OPERATION_TIMEOUT,
+                max_bytes=MAX_UPLOAD_BYTES)
+
+
+@app.post("/login")
+async def login(request: Request, nsec: str = Form(...), csrf: str = Form("")):
+    check_csrf(request, csrf)
+    if REGISTRATION_MODE != "interactive":
+        raise HTTPException(403, "Interactive sign-in is disabled in service mode.")
+    try:
+        root = identity.normalize_root(nsec)
+        await identity.list_profiles(root, HOME_RELAYS)
+    except ValueError as exc:
+        return await registration_page(request, error_message=str(exc), status_code=400)
+    except Exception:
+        return await registration_page(request, error_message="Unable to load this Control Desk from the configured home relays.", status_code=502)
+    request.session.clear()
+    request.session.update(root_nsec=root, csrf=secrets.token_urlsafe(32))
+    return RedirectResponse("/register", status_code=303)
+
+
+@app.post("/profiles/use")
+async def use_profile(request: Request, profile: str = Form(...), csrf: str = Form("")):
+    check_csrf(request, csrf)
+    root = request.session.get("root_nsec")
+    if not root or REGISTRATION_MODE != "interactive":
+        raise HTTPException(401, "Sign in before selecting an Acting Profile.")
+    try:
+        selected = await identity.acting_profile(root, profile, HOME_RELAYS)
+    except ValueError as exc:
+        return await registration_page(request, error_message=str(exc), status_code=400)
+    except Exception:
+        return await registration_page(request, error_message="Unable to retrieve this profile.", status_code=502)
+    request.session.update(profile=selected["name"], profile_npub=selected["npub"])
+    return RedirectResponse("/register", status_code=303)
+
+
+@app.post("/logout")
+async def logout(request: Request, csrf: str = Form("")):
+    check_csrf(request, csrf)
+    request.session.clear()
+    return RedirectResponse("/register", status_code=303)
 
 def public_base_url(request: Request) -> str:
     return PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
@@ -106,11 +202,7 @@ async def home(request: Request):
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_form(request: Request):
-    return templates.TemplateResponse(
-        request,
-        "register.html",
-        template_context(request),
-    )
+    return await registration_page(request)
 
 
 @app.post("/register", response_class=HTMLResponse)
@@ -119,33 +211,54 @@ async def register_artifact(
     file: UploadFile = File(...),
     campaign_id: str = Form(""),
     store_on_blossom: str | None = Form(None),
+    csrf: str = Form(""),
 ):
-    if not SIGNER_NSEC:
+    check_csrf(request, csrf)
+    if REGISTRATION_MODE == "interactive":
+        if not request.session.get("root_nsec") or not request.session.get("profile"):
+            await file.close()
+            return await registration_page(request, error_message="Sign in and select an Acting Profile before registering.", status_code=401)
+        try:
+            selected = await identity.acting_profile(request.session["root_nsec"], request.session["profile"], HOME_RELAYS)
+        except Exception:
+            await file.close()
+            return await registration_page(request, error_message="The Acting Profile could not be authorized. No artifact was published.", status_code=403)
+        signer_nsec = selected["nsec"]
+        upload_signer = signer_nsec
+        publication_relays = [value for value in re.split(r"[,\s]+", selected["relays"]) if value]
+    else:
+        signer_nsec, upload_signer, publication_relays = SIGNER_NSEC, BLOSSOM_NSEC or SIGNER_NSEC, DEFAULT_RELAYS
+    if not signer_nsec:
         await file.close()
-        return templates.TemplateResponse(request, "register.html", template_context(
-            request, error_message="Registration signing is not configured on this deployment.", campaign_id=campaign_id,
-        ), status_code=503)
+        return await registration_page(
+            request, error_message="Registration signing is not configured on this deployment.",
+            campaign_id=campaign_id, status_code=503,
+        )
     try:
         resolved_campaign_id = normalize_campaign_id(campaign_id)
         artifact = await read_artifact(file, max_bytes=MAX_UPLOAD_BYTES)
     except (ValueError, ArtifactUploadTooLarge) as exc:
-        return templates.TemplateResponse(
-            request,
-            "register.html",
-            template_context(request, error_message=str(exc), campaign_id=campaign_id),
-            status_code=400,
-        )
+        await file.close()
+        return await registration_page(request, error_message=str(exc), campaign_id=campaign_id, status_code=400)
 
     encoded_digest = base64url_digest(artifact.digest)
     public_url = resolver_url(request, resolved_campaign_id, encoded_digest)
     blossom = await maybe_upload_to_blossom(
         artifact,
         requested=(store_on_blossom or "").lower() in {"1", "true", "yes", "on"},
-        server=BLOSSOM_SERVER,
-        signer_nsec=BLOSSOM_NSEC or SIGNER_NSEC,
+        servers=BLOSSOM_SERVERS,
+        signer_nsec=upload_signer,
         timeout=BLOSSOM_TIMEOUT,
+        operation_timeout=BLOSSOM_OPERATION_TIMEOUT,
+        max_bytes=MAX_UPLOAD_BYTES, require=BLOSSOM_REQUIRE,
     )
-    anchor = await publish_anchor(artifact, signer_nsec=SIGNER_NSEC, relays=DEFAULT_RELAYS, timeout=QUERY_TIMEOUT)
+    if blossom and not blossom["stored"]:
+        anchor = {"published": False, "message": "Requested storage was not confirmed; no Anchor Record was published."}
+    else:
+        anchor = await publish_anchor(
+            artifact, signer_nsec=signer_nsec, relays=publication_relays, timeout=QUERY_TIMEOUT,
+            blossom_servers=(blossom or {}).get("confirmed_servers", []),
+        )
     return templates.TemplateResponse(
         request,
         "register_result.html",
@@ -202,8 +315,11 @@ async def download_artifact(campaign_id: str, reference: str, preview: bool = Fa
     except InvalidResolutionReference as exc:
         raise HTTPException(400, str(exc)) from exc
     try:
-        content = await asyncio.to_thread(fetch_artifact, digest, server=BLOSSOM_SERVER,
-                                          timeout=BLOSSOM_TIMEOUT, max_bytes=MAX_UPLOAD_BYTES)
+        try:
+            result = await perform_lookup(campaign_id, digest)
+        except EvidenceRetrievalError:
+            result = None
+        content = await fetch_artifact(digest, **artifact_options(result))
     except ValueError as exc:
         raise HTTPException(502, str(exc)) from exc
     except Exception as exc:
@@ -236,8 +352,7 @@ async def resolve_html(request: Request, campaign_id: str, reference: str):
             status_code=502,
         )
 
-    artifact_status = await retrieve_artifact(result.digest, server=BLOSSOM_SERVER,
-                                             timeout=BLOSSOM_TIMEOUT, max_bytes=MAX_UPLOAD_BYTES)
+    artifact_status = await retrieve_artifact(result.digest, **artifact_options(result))
     return templates.TemplateResponse(
         request,
         "result.html",
@@ -254,8 +369,7 @@ async def resolve_json(campaign_id: str, reference: str):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except EvidenceRetrievalError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    artifact_status = await retrieve_artifact(result.digest, server=BLOSSOM_SERVER,
-                                             timeout=BLOSSOM_TIMEOUT, max_bytes=MAX_UPLOAD_BYTES)
+    artifact_status = await retrieve_artifact(result.digest, **artifact_options(result))
     return {**result.to_dict(), "artifact": artifact_status}
 
 

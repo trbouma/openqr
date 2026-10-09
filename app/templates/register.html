@@ -4,13 +4,57 @@
 <section class="intro">
   <p class="eyebrow">Create a resolver reference</p>
   <h1>Register a digital artifact</h1>
-  <p>OpenQR calculates the artifact’s SHA-256 byte identity and creates a campaign resolver link. The artifact can optionally be stored on the configured Blossom server.</p>
+  <p>OpenQR calculates the artifact’s SHA-256 byte identity and creates a campaign resolver link.</p>
+</section>
+
+{% if error_message %}<p class="notice notice-error" role="alert">{{ error_message }}</p>{% endif %}
+<section class="lookup-panel">
+  {% if registration_mode == "service" %}
+  <h2>Service registration</h2>
+  <p>Anchor Records are signed by this deployment's configured service key.</p>
+  {% elif signed_in %}
+  <h2>Acting Profile</h2>
+  <p>Signed in with a Control Desk Key.</p>
+  <form action="/profiles/use" method="post" data-progress="profile-progress">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="profile">Acting Profile</label>
+    <select id="profile" name="profile" required>
+      <option value="" disabled {% if not acting_profile %}selected{% endif %}>Select a profile</option>
+      {% for name in profiles %}
+      <option value="{{ name }}" {% if name == acting_profile %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Use profile</button>
+  </form>
+  <p id="profile-progress" class="request-progress" role="status" aria-live="polite"><span class="progress-spinner" hidden></span><span data-progress-message="Please wait. Switching Acting Profile..."></span></p>
+  {% if acting_profile %}
+  <p><strong>{{ acting_profile }}</strong></p>
+  <p><code>{{ acting_npub }}</code></p>
+  {% for field in ["display_name", "name", "about", "address"] %}
+  {% if profile_details[field] %}<p>{{ profile_details[field] }}</p>{% endif %}
+  {% endfor %}
+  {% elif not profiles %}<p>No profiles are available. Create one using the OpenETR Control Desk.</p>{% endif %}
+  <form action="/logout" method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button class="secondary-button" type="submit">Sign out</button>
+  </form>
+  {% else %}
+  <h2>Control Desk</h2>
+  <form action="/login" method="post" data-progress="login-progress">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="nsec">Control Desk Key</label>
+    <input id="nsec" name="nsec" type="password" required autocomplete="off" spellcheck="false" placeholder="nsec1...">
+    <button type="submit">Sign in</button>
+  </form>
+  <p id="login-progress" class="request-progress" role="status" aria-live="polite"><span class="progress-spinner" hidden></span><span data-progress-message="Please wait. Loading your Control Desk..."></span></p>
+  {% endif %}
 </section>
 
 <section class="lookup-panel" aria-labelledby="register-heading">
   <h2 id="register-heading">Add an artifact</h2>
-  {% if error_message %}<p class="notice notice-error">{{ error_message }}</p>{% endif %}
   <form action="/register" method="post" enctype="multipart/form-data" data-progress="register-progress">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <fieldset {% if registration_mode == "interactive" and not acting_profile %}disabled{% endif %}>
     <label for="file">Digital artifact</label>
     <input id="file" name="file" type="file" required>
     <p class="field-note">Maximum upload size: {{ max_upload_bytes }} bytes.</p>
@@ -20,20 +64,19 @@
     <p class="field-note">Leave blank to use <code>etr</code>. The campaign ID becomes the first resolver path segment.</p>
 
     <label class="checkbox-row" for="store_on_blossom">
-      <input id="store_on_blossom" name="store_on_blossom" type="checkbox" value="true" checked>
-      <span>Store the artifact on {{ blossom_server }}</span>
+      <input id="store_on_blossom" name="store_on_blossom" type="checkbox" value="true">
+      <span>Store a public copy on all configured Blossom servers</span>
     </label>
-    {% if not blossom_upload_available %}
-    <p class="field-note">This deployment needs <code>OPENQR_BLOSSOM_NSEC</code> before it can authorize new Blossom uploads.</p>
-    {% endif %}
+    <p class="field-note">{{ blossom_servers | join(", ") }}</p>
 
     <button type="submit">Register artifact</button>
+    </fieldset>
   </form>
   <p id="register-progress" class="request-progress" role="status" aria-live="polite" aria-atomic="true"><span class="progress-spinner" aria-hidden="true" hidden></span><span data-progress-message="Please wait. Registering your artifact and publishing its Anchor Record..."></span></p>
 </section>
 
 <aside class="advisory">
   <strong>Register and publish.</strong>
-  <p>Registration publishes an Anchor Record signed by this deployment. Blossom storage makes the artifact publicly retrievable through its resolver link.</p>
+  <p>Registration publishes an Anchor Record signed by the Acting Profile, or by the configured service key in service mode. Optional Blossom storage makes the artifact publicly retrievable.</p>
 </aside>
 {% endblock %}

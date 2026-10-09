@@ -33,15 +33,21 @@
   <h2>Blossom storage</h2>
   <p class="{% if blossom.stored %}storage-good{% else %}storage-warn{% endif %}">{{ blossom.message }}</p>
   <dl>
-    <dt>Server</dt><dd><code>{{ blossom.server }}</code></dd>
-    {% if blossom.url %}<dt>Artifact URL</dt><dd><a href="{{ blossom.url }}"><code>{{ blossom.url }}</code></a></dd>{% endif %}
+    {% for url in blossom.urls %}
+    <dt>Artifact URL</dt><dd><a href="{{ url }}" rel="noopener noreferrer"><code>{{ url }}</code></a></dd>
+    {% endfor %}
+    {% for outcome in blossom.outcomes %}
+    <dt><code>{{ outcome.server }}</code></dt><dd>{{ outcome.status }}: {{ outcome.message }}</dd>
+    {% endfor %}
   </dl>
 </section>
 {% endif %}
 
 <section class="summary-panel">
   <h2>Anchor Record</h2>
+  {% if anchor.event_id %}
   <dl><dt>Event ID</dt><dd><code>{{ anchor.event_id }}</code></dd>
   <dt>Publisher</dt><dd><code>{{ anchor.publisher }}</code></dd></dl>
+  {% endif %}
 </section>
 {% endblock %}
