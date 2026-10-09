@@ -20,7 +20,7 @@
     <p class="field-note">Leave blank to use <code>etr</code>. The campaign ID becomes the first resolver path segment.</p>
 
     <label class="checkbox-row" for="store_on_blossom">
-      <input id="store_on_blossom" name="store_on_blossom" type="checkbox" value="true">
+      <input id="store_on_blossom" name="store_on_blossom" type="checkbox" value="true" checked>
       <span>Store the artifact on {{ blossom_server }}</span>
     </label>
     {% if not blossom_upload_available %}
@@ -32,7 +32,7 @@
 </section>
 
 <aside class="advisory">
-  <strong>Registration is not issuance.</strong>
-  <p>This operation creates an artifact digest and resolver QR. It does not publish an OpenETR Anchor Record or make a statement about the artifact.</p>
+  <strong>Register and publish.</strong>
+  <p>Registration publishes an Anchor Record signed by this deployment. Blossom storage makes the artifact publicly retrievable through its resolver link.</p>
 </aside>
 {% endblock %}

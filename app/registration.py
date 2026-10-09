@@ -9,12 +9,54 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
 import qrcode
 from fastapi import UploadFile
-from stroma import Event, Keys
+from stroma import Event, Keys, RelayPool
+
+
+async def publish_anchor(artifact: UploadedArtifact, *, signer_nsec: str, relays: list[str], timeout: float) -> dict:
+    keys = Keys(priv_k=signer_nsec)
+    event = Event(kind=1415, content=f"Registered Digital Artifact {artifact.filename}", tags=[
+        ["o", artifact.digest], ["action", "issue"], ["name", artifact.filename],
+        ["size_bytes", str(artifact.size_bytes)],
+        ["digest_generated_at", datetime.now(timezone.utc).isoformat()],
+    ])
+    event.sign(keys)
+    try:
+        acknowledgements = await asyncio.wait_for(
+            RelayPool(relays, timeout=timeout).publish(event), timeout=timeout + 1,
+        )
+    except Exception:
+        return {"published": False, "event_id": event.id, "publisher": keys.public_key_bech32(),
+                "message": "Publication was not confirmed. A relay may still have received the event; check the resolver before retrying."}
+    return {"published": True, "event_id": event.id, "publisher": keys.public_key_bech32(),
+            "message": "Anchor Record accepted by a relay.",
+            "relays": [ack.relay for ack in acknowledgements if ack.accepted]}
+
+
+def fetch_artifact(digest: str, *, server: str, timeout: float, max_bytes: int) -> bytes:
+    request = urllib.request.Request(blossom_blob_url(digest, server))
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        content = response.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise ValueError("Artifact exceeds the download size limit.")
+    if hashlib.sha256(content).hexdigest() != digest:
+        raise ValueError("Artifact digest verification failed.")
+    return content
+
+
+async def retrieve_artifact(digest: str, *, server: str, timeout: float, max_bytes: int) -> dict:
+    try:
+        content = await asyncio.to_thread(fetch_artifact, digest, server=server, timeout=timeout, max_bytes=max_bytes)
+    except ValueError as exc:
+        return {"verified": False, "message": str(exc)}
+    except Exception:
+        return {"verified": False, "message": "The artifact could not be retrieved from the configured Blossom server."}
+    return {"verified": True, "size_bytes": len(content), "message": "Artifact retrieved and SHA-256 verified."}
 
 BLOSSOM_AUTH_KIND = 24242
 BLOSSOM_AUTH_TTL_SECONDS = 5 * 60

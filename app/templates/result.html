@@ -27,6 +27,15 @@
   <a class="secondary-button" href="/api/{{ campaign_id }}/{{ result.digest }}">View JSON response</a>
 </section>
 
+<section class="summary-panel">
+  <h2>Digital artifact</h2>
+  <p>{{ artifact_status.message }}</p>
+  {% if artifact_status.verified %}
+  <p>{{ artifact_status.size_bytes }} bytes</p>
+  <a class="secondary-button" href="/artifact/{{ campaign_id }}/{{ result.digest }}">Download verified artifact</a>
+  {% endif %}
+</section>
+
 {% for anchor in result.anchors %}
 <article class="evidence-card">
   <div class="evidence-title">

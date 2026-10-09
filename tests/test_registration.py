@@ -1,9 +1,51 @@
 import base64
 import json
+import asyncio
+import hashlib
+import io
+import pytest
+from types import SimpleNamespace
 
 from stroma import Event, Keys
 
 from app.registration import blossom_auth_header, render_qr_png
+
+
+def test_anchor_publishing_requires_acknowledgement(monkeypatch):
+    from app import registration as module
+    artifact = module.UploadedArtifact("test.txt", "text/plain", 4, hashlib.sha256(b"test").hexdigest(), b"test")
+    keys = Keys()
+    class Pool:
+        def __init__(self, relays, **kwargs):
+            self.relays = relays
+        async def publish(self, event):
+            assert event.is_valid()
+            assert event.kind == 1415
+            assert event.tags.get_tags_value("o") == [artifact.digest]
+            assert event.tags.get_tags_value("action") == ["issue"]
+            return [SimpleNamespace(accepted=True, relay=self.relays[0])]
+    monkeypatch.setattr(module, "RelayPool", Pool)
+    result = asyncio.run(module.publish_anchor(artifact, signer_nsec=keys.private_key_bech32(), relays=["wss://example.com"], timeout=1))
+    assert result["published"]
+    async def failed(self, event):
+        raise TimeoutError()
+    monkeypatch.setattr(Pool, "publish", failed)
+    result = asyncio.run(module.publish_anchor(artifact, signer_nsec=keys.private_key_bech32(), relays=["wss://example.com"], timeout=1))
+    assert not result["published"]
+    assert result["event_id"]
+
+
+def test_artifact_retrieval_checks_bytes_and_size(monkeypatch):
+    from app import registration as module
+    content = b"test artifact"
+    digest = hashlib.sha256(content).hexdigest()
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(content))
+    kwargs = dict(server="https://example.com", timeout=1, max_bytes=100)
+    assert module.fetch_artifact(digest, **kwargs) == content
+    with pytest.raises(ValueError, match="verification failed"):
+        module.fetch_artifact("0" * 64, **kwargs)
+    with pytest.raises(ValueError, match="size limit"):
+        module.fetch_artifact(digest, **{**kwargs, "max_bytes": 2})
 
 
 def test_blossom_authorization_is_a_signed_nostr_event():

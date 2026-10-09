@@ -5,7 +5,7 @@
 <section class="result-heading">
   <p class="eyebrow">Registration result</p>
   <h1>Resolver reference created</h1>
-  <p class="status status-good">The artifact identity was calculated successfully.</p>
+  <p class="status {{ 'status-good' if anchor.published else 'status-warn' }}">{{ anchor.message }}</p>
 </section>
 
 <div class="registration-grid">
@@ -39,8 +39,9 @@
 </section>
 {% endif %}
 
-<aside class="advisory">
-  <strong>No Anchor Record was published.</strong>
-  <p>The resolver may report that no anchor evidence was found until an authorized actor issues an OpenETR Anchor Record for this digest.</p>
-</aside>
+<section class="summary-panel">
+  <h2>Anchor Record</h2>
+  <dl><dt>Event ID</dt><dd><code>{{ anchor.event_id }}</code></dd>
+  <dt>Publisher</dt><dd><code>{{ anchor.publisher }}</code></dd></dl>
+</section>
 {% endblock %}

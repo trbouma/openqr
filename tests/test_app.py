@@ -1,9 +1,19 @@
 from fastapi.testclient import TestClient
 import hashlib
+import pytest
 
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def publisher(monkeypatch):
+    from app import main
+    monkeypatch.setattr(main, "SIGNER_NSEC", "test-key")
+    async def publish(artifact, **kwargs):
+        return {"published": True, "event_id": "a" * 64, "publisher": "test-publisher", "message": "Anchor Record accepted by a relay."}
+    monkeypatch.setattr(main, "publish_anchor", publish)
 
 
 def test_home_page():
@@ -46,7 +56,7 @@ def test_form_preserves_campaign_path_from_url():
     assert response.headers["location"].startswith("/wine-2026/")
 
 
-def test_register_artifact_uses_default_campaign():
+def test_register_artifact_uses_default_campaign(publisher):
     content = b"OpenQR registration test"
     digest = hashlib.sha256(content).hexdigest()
     response = client.post(
@@ -56,10 +66,10 @@ def test_register_artifact_uses_default_campaign():
     assert response.status_code == 200
     assert digest in response.text
     assert "http://testserver/etr/" in response.text
-    assert "No Anchor Record was published" in response.text
+    assert "Anchor Record accepted by a relay" in response.text
 
 
-def test_register_artifact_accepts_campaign_id():
+def test_register_artifact_accepts_campaign_id(publisher):
     response = client.post(
         "/register",
         data={"campaign_id": "wine-2026"},
@@ -76,3 +86,32 @@ def test_qr_image_is_png():
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_resolver_retrieves_artifact_and_downloads_verified_bytes(monkeypatch):
+    import io
+    from app import main, registration
+    from app.resolver import ResolutionResult
+    content = b"retrievable artifact"
+    digest = hashlib.sha256(content).hexdigest()
+    async def lookup(*args):
+        return ResolutionResult(digest, "hex", ["wss://example.com"], "2026-01-01T00:00:00Z", [])
+    monkeypatch.setattr(main, "perform_lookup", lookup)
+    monkeypatch.setattr(registration.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(content))
+    response = client.get(f"/campaign/{digest}")
+    assert response.status_code == 200
+    assert "Download verified artifact" in response.text
+    assert client.get(f"/api/campaign/{digest}").json()["artifact"]["verified"]
+    response = client.get(f"/artifact/campaign/{digest}")
+    assert response.content == content
+    assert response.headers["content-disposition"].startswith("attachment;")
+    monkeypatch.setattr(registration.urllib.request, "urlopen", lambda *args, **kwargs: io.BytesIO(b"wrong bytes"))
+    assert client.get(f"/artifact/campaign/{digest}").status_code == 502
+    assert "Download verified artifact" not in client.get(f"/campaign/{digest}").text
+
+
+def test_registration_requires_signing_configuration(monkeypatch):
+    from app import main
+    monkeypatch.setattr(main, "SIGNER_NSEC", None)
+    response = client.post("/register", files={"file": ("test.txt", b"test", "text/plain")})
+    assert response.status_code == 503

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import os
 import re
 from pathlib import Path
@@ -24,6 +25,9 @@ from app.registration import (
     maybe_upload_to_blossom,
     read_artifact,
     render_qr_png,
+    publish_anchor,
+    retrieve_artifact,
+    fetch_artifact,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -41,6 +45,7 @@ BLOSSOM_SERVER = os.getenv(
     "OPENQR_BLOSSOM_SERVER", "https://blossom.getsafebox.app"
 ).rstrip("/")
 BLOSSOM_NSEC = os.getenv("OPENQR_BLOSSOM_NSEC") or None
+SIGNER_NSEC = os.getenv("OPENQR_SIGNER_NSEC") or BLOSSOM_NSEC
 BLOSSOM_TIMEOUT = float(os.getenv("OPENQR_BLOSSOM_TIMEOUT_SECONDS", "20"))
 CAMPAIGN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
@@ -59,7 +64,7 @@ def template_context(request: Request, **values):
         "relays": DEFAULT_RELAYS,
         "git_commit": GIT_COMMIT,
         "blossom_server": BLOSSOM_SERVER,
-        "blossom_upload_available": bool(BLOSSOM_NSEC),
+        "blossom_upload_available": bool(BLOSSOM_NSEC or SIGNER_NSEC),
         "max_upload_bytes": MAX_UPLOAD_BYTES,
         **values,
     }
@@ -114,6 +119,11 @@ async def register_artifact(
     campaign_id: str = Form(""),
     store_on_blossom: str | None = Form(None),
 ):
+    if not SIGNER_NSEC:
+        await file.close()
+        return templates.TemplateResponse(request, "register.html", template_context(
+            request, error_message="Registration signing is not configured on this deployment.", campaign_id=campaign_id,
+        ), status_code=503)
     try:
         resolved_campaign_id = normalize_campaign_id(campaign_id)
         artifact = await read_artifact(file, max_bytes=MAX_UPLOAD_BYTES)
@@ -131,9 +141,10 @@ async def register_artifact(
         artifact,
         requested=(store_on_blossom or "").lower() in {"1", "true", "yes", "on"},
         server=BLOSSOM_SERVER,
-        signer_nsec=BLOSSOM_NSEC,
+        signer_nsec=BLOSSOM_NSEC or SIGNER_NSEC,
         timeout=BLOSSOM_TIMEOUT,
     )
+    anchor = await publish_anchor(artifact, signer_nsec=SIGNER_NSEC, relays=DEFAULT_RELAYS, timeout=QUERY_TIMEOUT)
     return templates.TemplateResponse(
         request,
         "register_result.html",
@@ -148,7 +159,9 @@ async def register_artifact(
                 f"{quote(encoded_digest, safe='')}"
             ),
             blossom=blossom,
+            anchor=anchor,
         ),
+        status_code=200 if anchor["published"] else 502,
     )
 
 
@@ -181,6 +194,25 @@ async def resolve_input(reference: str = Query(..., min_length=1)):
     return RedirectResponse(url=f"/{quote(campaign_id)}/{canonical}", status_code=303)
 
 
+@app.get("/artifact/{campaign_id}/{reference}")
+async def download_artifact(campaign_id: str, reference: str):
+    try:
+        _, digest, _ = normalize_lookup(reference)
+    except InvalidResolutionReference as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        content = await asyncio.to_thread(fetch_artifact, digest, server=BLOSSOM_SERVER,
+                                          timeout=BLOSSOM_TIMEOUT, max_bytes=MAX_UPLOAD_BYTES)
+    except ValueError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "Artifact retrieval unavailable.") from exc
+    return Response(content, media_type="application/octet-stream", headers={
+        "Content-Disposition": f'attachment; filename="{digest}"',
+        "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+    })
+
+
 @app.get("/{campaign_id}/{reference}", response_class=HTMLResponse)
 async def resolve_html(request: Request, campaign_id: str, reference: str):
     try:
@@ -200,10 +232,12 @@ async def resolve_html(request: Request, campaign_id: str, reference: str):
             status_code=502,
         )
 
+    artifact_status = await retrieve_artifact(result.digest, server=BLOSSOM_SERVER,
+                                             timeout=BLOSSOM_TIMEOUT, max_bytes=MAX_UPLOAD_BYTES)
     return templates.TemplateResponse(
         request,
         "result.html",
-        template_context(request, result=result, campaign_id=campaign_id),
+        template_context(request, result=result, campaign_id=campaign_id, artifact_status=artifact_status),
     )
 
 
@@ -215,7 +249,9 @@ async def resolve_json(campaign_id: str, reference: str):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except EvidenceRetrievalError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return result.to_dict()
+    artifact_status = await retrieve_artifact(result.digest, server=BLOSSOM_SERVER,
+                                             timeout=BLOSSOM_TIMEOUT, max_bytes=MAX_UPLOAD_BYTES)
+    return {**result.to_dict(), "artifact": artifact_status}
 
 
 @app.get("/health")

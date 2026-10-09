@@ -12,15 +12,21 @@ a specific commit for reproducible installs and container builds. Stroma
 discards events with invalid identifiers or signatures during relay retrieval;
 OpenQR also checks the returned anchor's kind and artifact digest.
 
-OpenQR is deliberately read-only with respect to OpenETR evidence. It does not
-issue records, hold OpenETR issuer keys, manage visitor accounts, or determine
-whether evidence has legal or institutional effect. A separately configured
-deployment key may authorize optional Blossom storage only.
+OpenQR signs and publishes Anchor Records using a deployment key. It does not
+manage visitor accounts or determine whether evidence has legal or institutional
+effect. The publisher identifies the deployment, not the visitor uploading a file.
 
 The `/register` surface accepts a Digital Artifact, calculates its SHA-256
-digest, and creates a compact resolver QR. Registration does not publish an
-OpenETR Anchor Record. A deployment can optionally authorize storage of the
-uploaded bytes on its configured Blossom server.
+digest, publishes a signed kind `1415` Anchor Record, and creates a compact
+resolver QR. Blossom storage is selected by default and can be deselected.
+The result reports storage and relay acknowledgement separately. Unconfirmed
+publication may still have reached a relay; check the resolver before retrying.
+
+Opening a resolver link retrieves the artifact from the configured Blossom
+server and verifies its SHA-256 digest. Verified bytes can be downloaded through
+`/artifact/{campaign_id}/{digest}`; the download rechecks the digest. Missing,
+oversized, or mismatched artifacts are reported without hiding retrieved anchor
+evidence. The JSON resolver includes artifact retrieval status.
 
 ## Run Locally With Poetry
 
@@ -60,7 +66,8 @@ http://127.0.0.1:8000/wine-2026/cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448
 | `OPENQR_PUBLIC_BASE_URL` | Request origin | Public origin encoded in generated QR links |
 | `OPENQR_MAX_UPLOAD_BYTES` | `26214400` | Maximum registration upload size |
 | `OPENQR_BLOSSOM_SERVER` | `https://blossom.getsafebox.app` | Default artifact storage server |
-| `OPENQR_BLOSSOM_NSEC` | unset | Deployment key used only to authorize Blossom uploads |
+| `OPENQR_BLOSSOM_NSEC` | unset | Blossom upload key and fallback anchor signing key |
+| `OPENQR_SIGNER_NSEC` | `OPENQR_BLOSSOM_NSEC` | Anchor signing key; also authorizes storage when no separate Blossom key is set |
 | `OPENQR_BLOSSOM_TIMEOUT_SECONDS` | `20` | Blossom request timeout |
 | `OPENQR_BIND_ADDRESS` | `127.0.0.1` | Docker host bind address |
 | `OPENQR_PORT` | `8000` | Docker host port |
@@ -69,8 +76,9 @@ Copy `.env.example` to `.env` to customize Docker Compose settings.
 
 Set `OPENQR_PUBLIC_BASE_URL` to the production HTTPS origin before generating
 production QR codes. To enable the optional Blossom checkbox, provide a
-dedicated `OPENQR_BLOSSOM_NSEC`; OpenQR never displays this secret or asks a
-visitor to provide one.
+deployment key in `OPENQR_BLOSSOM_NSEC`; it also signs anchors unless
+`OPENQR_SIGNER_NSEC` is set. Existing deployments can continue using their
+configured key. OpenQR never displays the secret or asks visitors to provide one.
 
 Generate a dedicated upload key locally with:
 
