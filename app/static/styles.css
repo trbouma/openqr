@@ -22,6 +22,9 @@
 .pdf-controls button:disabled { opacity: .45; cursor: default; }
 .page-label { min-width: 5rem; text-align: center; }
 .preview-status { color: var(--muted); }
+.resolver-qr { text-align: center; }
+.resolver-qr h1 { max-width: none; font-size: 1.5rem; }
+.resolver-qr img { display: block; width: 240px; max-width: 100%; height: auto; margin: 1rem auto; }
 html { min-height: 100%; background: var(--page); -webkit-text-size-adjust: 100%; }
 body { min-height: 100vh; margin: 0; color: var(--text); background: var(--page); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; }
 a { color: var(--accent); }

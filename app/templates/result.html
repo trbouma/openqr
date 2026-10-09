@@ -1,37 +1,35 @@
 {% extends "base.html" %}
 {% block title %}OpenQR · Resolution result{% endblock %}
 {% block content %}
-<a class="back-link" href="/">← Check another artifact</a>
-<section class="result-heading">
-  <p class="eyebrow">Resolution result</p>
-  {% if result.status == "evidence_found" %}
-  <h1>Anchor evidence found</h1>
-  <p class="status status-good">{{ result.anchors|length }} candidate Anchor Record{% if result.anchors|length != 1 %}s{% endif %} returned</p>
-  {% elif result.status == "unverified_evidence_found" %}
-  <h1>Unverified evidence returned</h1>
-  <p class="status status-warn">The returned events did not pass all cryptographic checks.</p>
-  {% else %}
-  <h1>No Anchor Record found</h1>
-  <p class="status status-neutral">No matching event was returned from the configured relay scope.</p>
-  {% endif %}
+<section class="resolver-qr">
+  <h1>QR code</h1>
+  <img src="/qr/{{ campaign_id }}/{{ result.digest }}" alt="QR code for this artifact" width="240" height="240">
 </section>
 
-<section class="summary-panel">
-  <h2>Artifact identity</h2>
+{% for anchor in result.anchors %}
+<article class="evidence-card">
+  <div class="evidence-title">
+    <h2>Anchor Record{% if result.anchors|length > 1 %} {{ loop.index }}{% endif %}</h2>
+    <span class="verification {% if anchor.verified %}verified{% else %}not-verified{% endif %}">{% if anchor.verified %}Cryptographically verified{% else %}Verification failed{% endif %}</span>
+  </div>
   <dl>
+    <dt>Event ID</dt><dd><code>{{ anchor.event_id }}</code></dd>
+    <dt>Publisher</dt><dd><code>{{ anchor.publisher_npub }}</code></dd>
+    <dt>Published</dt><dd>{{ anchor.created_at }}</dd>
     <dt>SHA-256 digest</dt><dd><code>{{ result.digest }}</code></dd>
-    <dt>Input encoding</dt><dd>{{ result.supplied_encoding }}</dd>
-    <dt>Retrieved</dt><dd>{{ result.retrieved_at }}</dd>
-    <dt>Relay scope</dt><dd>{% for relay in result.relays %}<code>{{ relay }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}</dd>
+    {% if anchor.content %}<dt>Statement</dt><dd>{{ anchor.content }}</dd>{% endif %}
   </dl>
-  <a class="secondary-button" href="/api/{{ campaign_id }}/{{ result.digest }}">View JSON response</a>
+</article>
+{% else %}
+<section class="summary-panel">
+  <h2>Anchor Record</h2>
+  <p>No matching Anchor Record was returned from the configured relays.</p>
 </section>
+{% endfor %}
 
 <section class="summary-panel">
   <h2>Digital artifact</h2>
-  <p>{{ artifact_status.message }}</p>
   {% if artifact_status.verified %}
-  <p>{{ artifact_status.size_bytes }} bytes</p>
   {% if artifact_status.media_type %}
   <div class="artifact-preview" data-media-type="{{ artifact_status.media_type }}"
        data-media-url="/artifact/{{ campaign_id }}/{{ result.digest }}?preview=true">
@@ -49,34 +47,8 @@
   <p>No preview is available for this file type.</p>
   {% endif %}
   <a class="secondary-button" href="/artifact/{{ campaign_id }}/{{ result.digest }}">Download verified artifact</a>
+  {% else %}
+  <p>{{ artifact_status.message }}</p>
   {% endif %}
 </section>
-
-{% for anchor in result.anchors %}
-<article class="evidence-card">
-  <div class="evidence-title">
-    <div><p class="eyebrow">Candidate {{ loop.index }}</p><h2>Anchor Record</h2></div>
-    <span class="verification {% if anchor.verified %}verified{% else %}not-verified{% endif %}">{% if anchor.verified %}Cryptographically verified{% else %}Verification failed{% endif %}</span>
-  </div>
-  <dl>
-    <dt>Event ID</dt><dd><code>{{ anchor.event_id }}</code></dd>
-    <dt>Publisher</dt><dd><code>{{ anchor.publisher_npub }}</code></dd>
-    <dt>Published</dt><dd>{{ anchor.created_at }}</dd>
-    <dt>Kind</dt><dd>{{ anchor.kind }}</dd>
-    <dt>Structure check</dt><dd>{{ "Pass" if anchor.structure_valid else "Fail" }}</dd>
-    <dt>Event ID check</dt><dd>{{ "Pass" if anchor.event_id_valid else "Fail" }}</dd>
-    <dt>Signature check</dt><dd>{{ "Pass" if anchor.signature_valid else "Fail" }}</dd>
-    {% if anchor.content %}<dt>Statement</dt><dd>{{ anchor.content }}</dd>{% endif %}
-  </dl>
-  <details>
-    <summary>Event tags</summary>
-    <pre>{{ anchor.tags | tojson(indent=2) }}</pre>
-  </details>
-</article>
-{% endfor %}
-
-<aside class="advisory">
-  <strong>Evidence is not recognition.</strong>
-  <p>Relay retrieval and cryptographic verification do not, by themselves, determine authority, legal effect, or recognition under an external rulebook.</p>
-</aside>
 {% endblock %}
