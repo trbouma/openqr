@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#071426">
   <title>{% block title %}OpenQR{% endblock %}</title>
   <meta name="description" content="Resolve OpenETR QR references into independently verifiable anchor evidence.">
-  <link rel="icon" href="{{ url_for('static', path='openetr-logo.png') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+  <link rel="icon" href="{{ url_for('static', path='openetr-logo.png').path }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css').path }}">
 </head>
 <body>
   <header class="site-header">
     <a class="brand" href="/" aria-label="OpenQR home">
-      <img src="{{ url_for('static', path='openetr-logo.png') }}" alt="">
+      <img src="{{ url_for('static', path='openetr-logo.png').path }}" alt="">
       <span><strong>OpenQR</strong><small>OpenETR resolver</small></span>
     </a>
     <nav class="header-nav" aria-label="Primary navigation">

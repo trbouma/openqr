@@ -12,6 +12,14 @@ def test_home_page():
     assert "Check a digital artifact" in response.text
 
 
+def test_assets_use_relative_urls_behind_https_proxy():
+    response = client.get("/", headers={"host": "example.com", "x-forwarded-proto": "https"})
+    assert 'href="/static/styles.css"' in response.text
+    assert 'src="/static/openetr-logo.png"' in response.text
+    assert 'http://example.com/static/' not in response.text
+    assert client.get("/static/styles.css").status_code == 200
+
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
