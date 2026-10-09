@@ -203,3 +203,68 @@ def test_active_content_is_download_only(monkeypatch):
     mock_blob(monkeypatch, content)
     assert client.get(f"/artifact/etr/{digest}?preview=true").status_code == 415
     assert client.get(f"/artifact/etr/{digest}").status_code == 200
+
+
+def test_gs1_registration_and_routes(publisher, monkeypatch):
+    from app import main
+    from app.gs1 import TEST_GTIN
+    from app.registration import base64url_digest
+    monkeypatch.setattr(main, "PUBLIC_BASE_URL", "https://example.com")
+    content = b"GS1 artifact"
+    digest = hashlib.sha256(content).hexdigest()
+    encoded = base64url_digest(digest)
+    seen = {}
+    async def publish(artifact, **kwargs):
+        seen.update(kwargs)
+        return {"published": True, "message": "Accepted"}
+    monkeypatch.setattr(main, "publish_anchor", publish)
+    response = post_form("/register", data={"gs1_gtin": TEST_GTIN, "gs1_lot": "LOT1"},
+                         files={"file": ("test.txt", content, "text/plain")})
+    assert response.status_code == 200
+    assert seen["gs1"].tags == [["gs1_gtin", TEST_GTIN], ["gs1_lot", "LOT1"]]
+    path = f"/01/{TEST_GTIN}/10/LOT1?digest={encoded}"
+    assert "https://example.com" + path in response.text
+    assert "https://example.com/etr/" in response.text
+    assert "Documentation test GTIN" in response.text
+    payloads = []
+    def render(url):
+        payloads.append(url)
+        return b"png"
+    monkeypatch.setattr(main, "render_qr_png", render)
+    assert client.get("/gs1/qr" + path).status_code == 200
+    assert payloads == ["https://example.com" + path]
+    mock_blob(monkeypatch, content)
+    response = client.get(path)
+    assert response.status_code == 200
+    assert "No verified anchor with matching GS1 values" in response.text
+    assert "Download verified artifact" in response.text
+    from app.resolver import ResolutionResult, event_to_evidence
+    from stroma import Event, Keys
+    event = Event(kind=1415, content="", tags=[["o", digest], ["action", "issue"], *seen["gs1"].tags])
+    event.sign(Keys())
+    async def matched(*args):
+        return ResolutionResult(digest, "hex", [], "now", [event_to_evidence(event, digest)])
+    monkeypatch.setattr(main, "perform_lookup", matched)
+    assert "A cryptographically verified anchor contains matching GS1 values" in client.get(path).text
+    assert "No verified anchor with matching GS1 values" in client.get(path.replace("LOT1", "LOT2")).text
+    response = client.get("/resolve", params={"reference": "https://example.com" + path}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == path
+
+
+@pytest.mark.parametrize("fields", [{"gs1_gtin": "123"}, {"gs1_lot": "LOT"},
+                                   {"gs1_gtin": "09520123456788", "gs1_serial": "x" * 43}])
+def test_invalid_gs1_does_not_publish(publisher, monkeypatch, fields):
+    from app import main
+    async def forbidden(*args, **kwargs):
+        pytest.fail("Invalid GS1 data must not cause storage or publication")
+    monkeypatch.setattr(main, "publish_anchor", forbidden)
+    monkeypatch.setattr(main, "maybe_upload_to_blossom", forbidden)
+    response = post_form("/register", data=fields, files={"file": ("x.txt", b"x", "text/plain")})
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("path", ["/01/123?digest=no", "/01/09520123456788",
+                                 "/gs1/qr/01/09520123456788?digest=no"])
+def test_invalid_gs1_routes(path):
+    assert client.get(path).status_code == 400

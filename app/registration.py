@@ -13,13 +13,15 @@ from fastapi import UploadFile
 from stroma import BlossomPool, Event, Keys, RelayPool
 
 
-async def publish_anchor(artifact: UploadedArtifact, *, signer_nsec: str, relays: list[str], timeout: float, blossom_servers: list[str] = ()) -> dict:
+async def publish_anchor(artifact: UploadedArtifact, *, signer_nsec: str, relays: list[str], timeout: float, blossom_servers: list[str] = (), gs1=None) -> dict:
     keys = Keys(priv_k=signer_nsec)
     tags = [
         ["o", artifact.digest], ["action", "issue"], ["name", artifact.filename],
         ["size_bytes", str(artifact.size_bytes)],
         ["digest_generated_at", datetime.now(timezone.utc).isoformat()],
     ]
+    if gs1:
+        tags.extend(gs1.tags)
     if blossom_servers:
         tags.extend([["blossom", server] for server in BlossomPool(blossom_servers).servers])
     event = Event(kind=1415, content=f"Registered Digital Artifact {artifact.filename}", tags=tags)

@@ -188,3 +188,58 @@ rebuilds and recreates the service, and waits for `/health` to report success.
 ```sh
 poetry run pytest
 ```
+## GS1 Digital Link integration
+
+Registration optionally accepts a GTIN, batch/lot (AI 10), and serial number
+(AI 21). Leave these blank to retain the existing digest-only workflow. For a
+demonstration, enter `09520123456788`, the documentation example GTIN; it is
+explicitly labelled test data, not a production-assigned identifier.
+
+OpenQR validates GTIN length and check digit, normalizes it to 14 digits, and
+validates optional qualifiers (maximum 20 GS1 characters). This implementation
+excludes slash and dot-only qualifiers for safe routing. It does not verify GS1
+assignment or certify retail barcode print quality. Use HTTPS and a legitimately
+assigned product GTIN for production; HTTP is supported for local development.
+
+Registration generates both the existing `/{campaign}/{digest}` QR and a normal
+QR encoding a GS1 Digital Link with an OpenQR extension:
+
+```text
+https://example.com/01/09520123456788?digest=cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448
+```
+
+Optional qualifiers appear in order `/10/{lot}/21/{serial}`. The full SHA-256
+digest remains in the `digest` query parameter, not AI 21. Incoming digest values
+may be lowercase hex or canonical unpadded Base64URL; generated links use the
+latter. No serial-to-digest database is needed. GS1 links currently use the
+default `etr` resolution handler, independently of the registration campaign.
+
+Before signing the kind 1415 anchor, OpenQR adds these application-convention tags:
+
+| Tag | Value |
+| --- | --- |
+| `gs1_gtin` | Normalized 14-digit GTIN |
+| `gs1_lot` | Optional batch/lot |
+| `gs1_serial` | Optional serial number, never the full digest |
+
+The existing `o` tag retains the full hexadecimal artifact digest. These tags
+are signed publisher assertions, not proof of GS1 allocation or bottle authenticity.
+No new OpenETR event kind is introduced.
+
+The `/01/{gtin}` route (with optional qualifiers) retrieves by digest and renders
+the artifact, both QR options, and anchor details. It reports whether a verified
+issue anchor with exactly matching digest and GS1 fields was found. A mismatch
+does not suppress other evidence or prevent independent artifact verification.
+The home-page lookup also accepts this Digital Link profile. `/gs1/qr/01/...`
+renders its PNG. Both query entry points require exactly one `digest` parameter;
+other GS1 keys, extensions and general resolver behaviours are not implemented.
+
+This is a bounded Digital Link integration, **not a GS1-conformant resolver**.
+Production use additionally requires appropriate GS1 identifier allocation,
+retail symbol dimensions, quiet zone, placement, print verification and scanner
+testing. A copied label remains copyable, and the same artifact can describe
+multiple bottles; use genuine serialization where individual identity matters.
+
+References: [GS1 Digital Link URI Syntax](https://ref.gs1.org/standards/digital-link/uri-syntax/1.7.0/),
+[GS1 Resolver Standard](https://ref.gs1.org/standards/resolver/),
+[Retail 2D implementation guidance](https://ref.gs1.org/guidelines/2d-in-retail/).

@@ -63,6 +63,18 @@
     <input id="campaign_id" name="campaign_id" type="text" value="{{ campaign_id or '' }}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="etr" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}">
     <p class="field-note">Leave blank to use <code>etr</code>. The campaign ID becomes the first resolver path segment.</p>
 
+    <details {% if gs1_gtin or gs1_lot or gs1_serial %}open{% endif %}>
+      <summary>GS1 Digital Link (optional)</summary>
+      <label for="gs1_gtin">GTIN</label>
+      <input id="gs1_gtin" name="gs1_gtin" value="{{ gs1_gtin or '' }}" inputmode="numeric" pattern="[0-9]{8}|[0-9]{12,14}" placeholder="09520123456788">
+      <p class="field-note">Test example: <code>09520123456788</code>. For production, use your product's assigned GTIN. A valid check digit does not establish assignment.</p>
+      <label for="gs1_lot">Batch / lot (AI 10)</label>
+      <input id="gs1_lot" name="gs1_lot" value="{{ gs1_lot or '' }}" maxlength="20" placeholder="Optional">
+      <label for="gs1_serial">Serial number (AI 21)</label>
+      <input id="gs1_serial" name="gs1_serial" value="{{ gs1_serial or '' }}" maxlength="20" placeholder="Optional">
+      <p class="field-note">The full artifact digest is carried separately in the URL. Leave all GS1 fields blank for a regular resolver QR only.</p>
+    </details>
+
     <label class="checkbox-row" for="store_on_blossom">
       <input id="store_on_blossom" name="store_on_blossom" type="checkbox" value="true">
       <span>Store a public copy on all configured Blossom servers</span>

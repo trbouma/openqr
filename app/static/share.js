@@ -1,5 +1,4 @@
-const panel = document.querySelector('[data-resolver-link]');
-if (panel) {
+for (const panel of document.querySelectorAll('[data-resolver-link]')) {
   const status = panel.querySelector('.copy-status');
   const copyLink = panel.querySelector('[data-copy-link]');
   const copyQr = panel.querySelector('[data-copy-qr]');

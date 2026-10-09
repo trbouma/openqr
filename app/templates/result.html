@@ -13,6 +13,11 @@
     <dt>Publisher</dt><dd><code>{{ anchor.publisher_npub }}</code></dd>
     <dt>Published</dt><dd>{{ anchor.created_at }}</dd>
     <dt>SHA-256 digest</dt><dd><code>{{ result.digest }}</code></dd>
+    {% for tag in anchor.tags %}
+    {% if tag|length == 2 and tag[0] in ['gs1_gtin', 'gs1_lot', 'gs1_serial'] %}
+    <dt>{{ tag[0] }}</dt><dd><code>{{ tag[1] }}</code></dd>
+    {% endif %}
+    {% endfor %}
     {% if anchor.content %}<dt>Statement</dt><dd>{{ anchor.content }}</dd>{% endif %}
     <dt>Blossom hints</dt>
     <dd>{% for server in anchor.blossom_servers %}
@@ -66,6 +71,7 @@
   <a class="resolver-link" href="{{ share_url }}">{{ share_url }}</a>
 </section>
 
+{% include "gs1_qr.html" %}
 {{ anchor_details }}
 <script type="module" src="/static/share.js"></script>
 {% endblock %}

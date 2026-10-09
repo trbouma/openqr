@@ -5,7 +5,7 @@ import os
 import re
 import secrets
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from stroma import BlossomPool, storage_threshold
 
 from app import identity
+from app.gs1 import GS1Data, parse_link
 from app.session import EncryptedSessionMiddleware, check_csrf, csrf_token
 
 from app.resolver import (
@@ -212,6 +213,9 @@ async def register_artifact(
     campaign_id: str = Form(""),
     store_on_blossom: str | None = Form(None),
     csrf: str = Form(""),
+    gs1_gtin: str = Form(""),
+    gs1_lot: str = Form(""),
+    gs1_serial: str = Form(""),
 ):
     check_csrf(request, csrf)
     if REGISTRATION_MODE == "interactive":
@@ -236,10 +240,16 @@ async def register_artifact(
         )
     try:
         resolved_campaign_id = normalize_campaign_id(campaign_id)
+        gs1 = GS1Data.validate(gs1_gtin, gs1_lot, gs1_serial) if gs1_gtin.strip() else None
+        if not gs1 and (gs1_lot.strip() or gs1_serial.strip()):
+            raise ValueError("A GTIN is required when supplying batch or serial information.")
+        if gs1:
+            gs1.url(public_base_url(request), "0" * 64)
         artifact = await read_artifact(file, max_bytes=MAX_UPLOAD_BYTES)
     except (ValueError, ArtifactUploadTooLarge) as exc:
         await file.close()
-        return await registration_page(request, error_message=str(exc), campaign_id=campaign_id, status_code=400)
+        return await registration_page(request, error_message=str(exc), campaign_id=campaign_id,
+                                       gs1_gtin=gs1_gtin, gs1_lot=gs1_lot, gs1_serial=gs1_serial, status_code=400)
 
     encoded_digest = base64url_digest(artifact.digest)
     public_url = resolver_url(request, resolved_campaign_id, encoded_digest)
@@ -258,6 +268,7 @@ async def register_artifact(
         anchor = await publish_anchor(
             artifact, signer_nsec=signer_nsec, relays=publication_relays, timeout=QUERY_TIMEOUT,
             blossom_servers=(blossom or {}).get("confirmed_servers", []),
+            gs1=gs1,
         )
     return templates.TemplateResponse(
         request,
@@ -274,6 +285,9 @@ async def register_artifact(
             ),
             blossom=blossom,
             anchor=anchor,
+            gs1=gs1,
+            gs1_url=gs1.url(public_base_url(request), artifact.digest) if gs1 else None,
+            gs1_qr_url=("/gs1/qr" + gs1.path + "?digest=" + encoded_digest) if gs1 else None,
             publication_relay_source="Acting Profile (home relays if unset)" if REGISTRATION_MODE == "interactive" else "Deployment relay configuration",
             relay_scope_mismatch=bool(anchor.get("relays")) and not (
                 {relay.rstrip("/") for relay in anchor["relays"]}
@@ -301,8 +315,14 @@ async def qr_image(request: Request, campaign_id: str, reference: str):
 @app.get("/resolve", include_in_schema=False)
 async def resolve_input(reference: str = Query(..., min_length=1)):
     try:
+        parsed = urlsplit(reference.strip())
+        if parsed.path.startswith("/01/") and parsed.scheme in {"http", "https"}:
+            if parsed.fragment:
+                raise ValueError("GS1 links cannot contain a fragment in this profile.")
+            gs1, digest = parse_link(unquote(parsed.path), parsed.query)
+            return RedirectResponse(gs1.path + "?digest=" + base64url_digest(digest), status_code=303)
         campaign_id, digest, supplied_encoding = normalize_lookup(reference)
-    except InvalidResolutionReference as exc:
+    except ValueError as exc:
         return RedirectResponse(
             url=f"/?error={quote(str(exc))}&reference={quote(reference)}",
             status_code=303,
@@ -338,8 +358,31 @@ async def download_artifact(campaign_id: str, reference: str, preview: bool = Fa
     })
 
 
+@app.get("/gs1/qr/01/{gs1_path:path}")
+async def gs1_qr(request: Request, gs1_path: str):
+    try:
+        data, digest = parse_link("/01/" + gs1_path, request.url.query)
+        url = data.url(public_base_url(request), digest)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return Response(render_qr_png(url), media_type="image/png")
+
+
+@app.get("/01/{gs1_path:path}", response_class=HTMLResponse)
+async def resolve_gs1(request: Request, gs1_path: str):
+    try:
+        data, digest = parse_link("/01/" + gs1_path, request.url.query)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return await render_resolution(request, "etr", digest, gs1=data)
+
+
 @app.get("/{campaign_id}/{reference}", response_class=HTMLResponse)
 async def resolve_html(request: Request, campaign_id: str, reference: str):
+    return await render_resolution(request, campaign_id, reference)
+
+
+async def render_resolution(request: Request, campaign_id: str, reference: str, gs1=None):
     try:
         result = await perform_lookup(campaign_id, reference)
     except InvalidResolutionReference as exc:
@@ -362,6 +405,10 @@ async def resolve_html(request: Request, campaign_id: str, reference: str):
         request,
         "result.html",
         template_context(request, result=result, campaign_id=campaign_id, artifact_status=artifact_status,
+                         gs1=gs1,
+                         gs1_match=bool(gs1 and any(gs1.matches(anchor, result.digest) for anchor in result.anchors)),
+                         gs1_url=gs1.url(public_base_url(request), result.digest) if gs1 else None,
+                         gs1_qr_url=("/gs1/qr" + gs1.path + "?digest=" + base64url_digest(result.digest)) if gs1 else None,
                          share_url=resolver_url(request, campaign_id, base64url_digest(result.digest))),
     )
 

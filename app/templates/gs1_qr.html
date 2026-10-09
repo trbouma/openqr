@@ -1,0 +1,25 @@
+{% if gs1 %}
+<section class="resolver-qr" data-resolver-link="{{ gs1_url }}">
+  <h2>GS1 Digital Link</h2>
+  <dl>
+    <dt>GTIN</dt><dd><code>{{ gs1.gtin }}</code></dd>
+    {% if gs1.lot %}<dt>Batch / lot</dt><dd>{{ gs1.lot }}</dd>{% endif %}
+    {% if gs1.serial %}<dt>Serial number</dt><dd>{{ gs1.serial }}</dd>{% endif %}
+  </dl>
+  {% if gs1.gtin == '09520123456788' %}
+  <p class="notice">Documentation test GTIN. Not for production checkout labels.</p>
+  {% endif %}
+  {% if gs1_match is defined %}
+  <p class="notice">{% if gs1_match %}A cryptographically verified anchor contains matching GS1 values. This is a publisher assertion, not proof of GS1 assignment or physical product authenticity.{% else %}No verified anchor with matching GS1 values was found. The URL's product association is unconfirmed, even if the artifact digest verifies.{% endif %}</p>
+  {% endif %}
+  <img src="{{ gs1_qr_url }}" alt="QR code containing GTIN and full artifact digest" width="240" height="240">
+  <div class="share-actions">
+    <button type="button" data-copy-qr>Copy QR code</button>
+    <button type="button" data-copy-link>Copy link</button>
+    <a class="secondary-button" href="{{ gs1_qr_url }}" download="gs1-digital-link.png">Download QR</a>
+  </div>
+  <p class="copy-status" role="status" aria-live="polite"></p>
+  <a class="resolver-link" href="{{ gs1_url }}">{{ gs1_url }}</a>
+  <p class="field-note">GS1 Digital Link syntax with an OpenQR digest extension. Identifier assignment and printed barcode compliance are not certified by OpenQR.</p>
+</section>
+{% endif %}
