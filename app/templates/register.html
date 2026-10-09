@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}OpenQR · Register a digital artifact{% endblock %}
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">Create a resolver reference</p>
+  <h1>Register a digital artifact</h1>
+  <p>OpenQR calculates the artifact’s SHA-256 byte identity and creates a campaign resolver link. The artifact can optionally be stored on the configured Blossom server.</p>
+</section>
+
+<section class="lookup-panel" aria-labelledby="register-heading">
+  <h2 id="register-heading">Add an artifact</h2>
+  {% if error_message %}<p class="notice notice-error">{{ error_message }}</p>{% endif %}
+  <form action="/register" method="post" enctype="multipart/form-data">
+    <label for="file">Digital artifact</label>
+    <input id="file" name="file" type="file" required>
+    <p class="field-note">Maximum upload size: {{ max_upload_bytes }} bytes.</p>
+
+    <label for="campaign_id">Campaign ID <span class="optional">Optional</span></label>
+    <input id="campaign_id" name="campaign_id" type="text" value="{{ campaign_id or '' }}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="etr" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}">
+    <p class="field-note">Leave blank to use <code>etr</code>. The campaign ID becomes the first resolver path segment.</p>
+
+    <label class="checkbox-row" for="store_on_blossom">
+      <input id="store_on_blossom" name="store_on_blossom" type="checkbox" value="true">
+      <span>Store the artifact on {{ blossom_server }}</span>
+    </label>
+    {% if not blossom_upload_available %}
+    <p class="field-note">This deployment needs <code>OPENQR_BLOSSOM_NSEC</code> before it can authorize new Blossom uploads.</p>
+    {% endif %}
+
+    <button type="submit">Register artifact</button>
+  </form>
+</section>
+
+<aside class="advisory">
+  <strong>Registration is not issuance.</strong>
+  <p>This operation creates an artifact digest and resolver QR. It does not publish an OpenETR Anchor Record or make a statement about the artifact.</p>
+</aside>
+{% endblock %}

@@ -1,0 +1,1 @@
+"""OpenQR web application."""

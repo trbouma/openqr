@@ -1,0 +1,29 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        OPENQR_GIT_COMMIT: ${OPENQR_GIT_COMMIT:-unknown}
+    image: ${OPENQR_IMAGE:-openqr-web:local}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${OPENQR_BIND_ADDRESS:-127.0.0.1}:${OPENQR_PORT:-8000}:8000"
+    environment:
+      OPENQR_RELAYS: ${OPENQR_RELAYS:-wss://relay.openetr.org}
+      OPENQR_QUERY_TIMEOUT_SECONDS: ${OPENQR_QUERY_TIMEOUT_SECONDS:-10}
+      OPENQR_QUERY_LIMIT: ${OPENQR_QUERY_LIMIT:-20}
+      OPENQR_PUBLIC_BASE_URL: ${OPENQR_PUBLIC_BASE_URL:-}
+      OPENQR_MAX_UPLOAD_BYTES: ${OPENQR_MAX_UPLOAD_BYTES:-26214400}
+      OPENQR_BLOSSOM_SERVER: ${OPENQR_BLOSSOM_SERVER:-https://blossom.getsafebox.app}
+      OPENQR_BLOSSOM_NSEC: ${OPENQR_BLOSSOM_NSEC:-}
+      OPENQR_BLOSSOM_TIMEOUT_SECONDS: ${OPENQR_BLOSSOM_TIMEOUT_SECONDS:-20}
+      OPENQR_GIT_COMMIT: ${OPENQR_GIT_COMMIT:-unknown}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s

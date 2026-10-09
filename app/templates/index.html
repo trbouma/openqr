@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}OpenQR · Check a digital artifact{% endblock %}
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">Evidence for what follows</p>
+  <h1>Check a digital artifact</h1>
+  <p>Enter the digest from an OpenETR QR code or paste its complete resolver URL. OpenQR looks for signed Anchor Records without requiring an account.</p>
+</section>
+
+<section class="lookup-panel" aria-labelledby="lookup-heading">
+  <h2 id="lookup-heading">Resolve a QR reference</h2>
+  {% if request.query_params.get('error') %}
+  <p class="notice notice-error">{{ request.query_params.get('error') }}</p>
+  {% endif %}
+  <form action="/resolve" method="get">
+    <label for="reference">Artifact digest or resolver URL</label>
+    <input id="reference" name="reference" type="text" required autocomplete="off" autocapitalize="none" spellcheck="false" value="{{ request.query_params.get('reference', '') }}" placeholder="cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448">
+    <button type="submit">Check evidence</button>
+  </form>
+  <p class="field-note">Accepts a 64-character lowercase SHA-256 digest, its 43-character unpadded Base64URL form, or a standard <code>/etr/</code> resolver URL.</p>
+</section>
+
+<section class="steps" aria-label="How OpenQR works">
+  <article><span>1</span><h2>Identify</h2><p>The QR reference resolves to the artifact’s SHA-256 byte identity.</p></article>
+  <article><span>2</span><h2>Discover</h2><p>Configured relays are queried for kind 1415 Anchor Records carrying that digest.</p></article>
+  <article><span>3</span><h2>Verify</h2><p>Event identifiers and signatures are checked before evidence is presented.</p></article>
+</section>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}OpenQR · Artifact registered{% endblock %}
+{% block content %}
+<a class="back-link" href="/register">← Register another artifact</a>
+<section class="result-heading">
+  <p class="eyebrow">Registration result</p>
+  <h1>Resolver reference created</h1>
+  <p class="status status-good">The artifact identity was calculated successfully.</p>
+</section>
+
+<div class="registration-grid">
+  <section class="summary-panel registration-details">
+    <h2>Digital artifact</h2>
+    <dl>
+      <dt>Filename</dt><dd>{{ artifact.filename }}</dd>
+      <dt>Size</dt><dd>{{ artifact.size_bytes }} bytes</dd>
+      <dt>Media type</dt><dd>{{ artifact.media_type }}</dd>
+      <dt>Campaign ID</dt><dd><code>{{ campaign_id }}</code></dd>
+      <dt>SHA-256 digest</dt><dd><code>{{ artifact.digest }}</code></dd>
+      <dt>Base64URL</dt><dd><code>{{ encoded_digest }}</code></dd>
+    </dl>
+  </section>
+
+  <section class="summary-panel qr-panel">
+    <h2>Resolver QR</h2>
+    <img src="{{ qr_image_url }}" alt="QR code for the OpenQR resolver link" width="330" height="330">
+    <a class="resolver-link" href="{{ resolver_url }}"><code>{{ resolver_url }}</code></a>
+  </section>
+</div>
+
+{% if blossom %}
+<section class="summary-panel">
+  <h2>Blossom storage</h2>
+  <p class="{% if blossom.stored %}storage-good{% else %}storage-warn{% endif %}">{{ blossom.message }}</p>
+  <dl>
+    <dt>Server</dt><dd><code>{{ blossom.server }}</code></dd>
+    {% if blossom.url %}<dt>Artifact URL</dt><dd><a href="{{ blossom.url }}"><code>{{ blossom.url }}</code></a></dd>{% endif %}
+  </dl>
+</section>
+{% endif %}
+
+<aside class="advisory">
+  <strong>No Anchor Record was published.</strong>
+  <p>The resolver may report that no anchor evidence was found until an authorized actor issues an OpenETR Anchor Record for this digest.</p>
+</aside>
+{% endblock %}
