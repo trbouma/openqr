@@ -52,6 +52,40 @@ def test_home_page():
     assert "Check a digital artifact" in response.text
 
 
+@pytest.mark.parametrize("lot,serial,suffix", [("", "", ""), ("LOT1", "", "/10/LOT1"),
+                                               ("", "S1", "/21/S1"), ("LOT1", "S1", "/10/LOT1/21/S1")])
+def test_generate_gs1_from_result(monkeypatch, lot, serial, suffix):
+    from app import main
+    from app.gs1 import TEST_GTIN
+    from app.registration import base64url_digest
+    content = b"original for GS1"
+    digest = hashlib.sha256(content).hexdigest()
+    mock_blob(monkeypatch, content)
+    async def forbidden(*args, **kwargs):
+        pytest.fail("Generating a link must not publish or upload")
+    monkeypatch.setattr(main, "publish_anchor", forbidden)
+    monkeypatch.setattr(main, "maybe_upload_to_blossom", forbidden)
+    page = client.get("/etr/" + digest)
+    assert f'name="digest" value="{digest}"' in page.text
+    assert "authorized to use in accordance with GS1 standards" in page.text
+    response = client.get("/gs1-link", params={"digest": digest, "gtin": TEST_GTIN,
+                                               "lot": lot, "serial": serial}, follow_redirects=False)
+    assert response.status_code == 303
+    target = f"/01/{TEST_GTIN}{suffix}?d={base64url_digest(digest)}"
+    assert response.headers["location"] == target
+    result = client.get(target)
+    assert result.status_code == 200
+    assert "Download QR" in result.text
+    assert "No verified anchor with matching GS1 values" in result.text
+
+
+@pytest.mark.parametrize("values", [{}, {"digest": "no", "gtin": "09520123456788"},
+                                    {"digest": "a" * 64, "gtin": "09520123456789"},
+                                    {"digest": "a" * 64, "gtin": "09520123456788", "lot": "bad/lot"}])
+def test_generate_gs1_invalid(values):
+    assert client.get("/gs1-link", params=values).status_code == 400
+
+
 @pytest.mark.parametrize("content", [b"original file", b"", b"x" * 150000])
 def test_original_file_check_is_anonymous_and_read_only(monkeypatch, content):
     from app import main

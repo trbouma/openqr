@@ -22,6 +22,7 @@ from app.resolver import (
     InvalidResolutionReference,
     ResolutionResult,
     normalize_lookup,
+    normalize_digest,
     resolve_anchor_evidence,
 )
 from app.registration import (
@@ -393,6 +394,21 @@ async def download_artifact(request: Request, campaign_id: str, reference: str, 
             headers["Content-Range"] = f"bytes {start}-{end}/{size}"
             return Response(content[start:end + 1], status_code=206, media_type=media_type, headers=headers)
     return Response(content, media_type=media_type or "application/octet-stream", headers=headers)
+
+
+@app.get("/gs1-link")
+async def create_gs1_link(request: Request, digest: str = "", gtin: str = "",
+                          lot: str = "", serial: str = ""):
+    try:
+        digest, _ = normalize_digest(digest)
+        data = GS1Data.validate(gtin, lot, serial)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            request, "error.html",
+            template_context(request, title="Invalid GS1 link", message=str(exc)),
+            status_code=400,
+        )
+    return RedirectResponse(data.path + "?d=" + base64url_digest(digest), status_code=303)
 
 
 @app.get("/gs1/qr/01/{gs1_path:path}")
