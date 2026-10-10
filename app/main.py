@@ -304,7 +304,7 @@ async def register_artifact(
             anchor=anchor,
             gs1=gs1,
             gs1_url=gs1.url(public_base_url(request), artifact.digest) if gs1 else None,
-            gs1_qr_url=("/gs1/qr" + gs1.path + "?digest=" + encoded_digest) if gs1 else None,
+            gs1_qr_url=("/gs1/qr" + gs1.path + "?d=" + encoded_digest) if gs1 else None,
             publication_relay_source="Acting Profile (home relays if unset)" if REGISTRATION_MODE == "interactive" else "Deployment relay configuration",
             relay_scope_mismatch=bool(anchor.get("relays")) and not (
                 {relay.rstrip("/") for relay in anchor["relays"]}
@@ -337,7 +337,7 @@ async def resolve_input(reference: str = Query(..., min_length=1)):
             if parsed.fragment:
                 raise ValueError("GS1 links cannot contain a fragment in this profile.")
             gs1, digest = parse_link(unquote(parsed.path), parsed.query)
-            return RedirectResponse(gs1.path + "?digest=" + base64url_digest(digest), status_code=303)
+            return RedirectResponse(gs1.path + "?d=" + base64url_digest(digest), status_code=303)
         campaign_id, digest, supplied_encoding = normalize_lookup(reference)
     except ValueError as exc:
         return RedirectResponse(
@@ -445,7 +445,7 @@ async def render_resolution(request: Request, campaign_id: str, reference: str, 
                          gs1=gs1,
                          gs1_match=bool(gs1 and any(gs1.matches(anchor, result.digest) for anchor in result.anchors)),
                          gs1_url=gs1.url(public_base_url(request), result.digest) if gs1 else None,
-                         gs1_qr_url=("/gs1/qr" + gs1.path + "?digest=" + base64url_digest(result.digest)) if gs1 else None,
+                         gs1_qr_url=("/gs1/qr" + gs1.path + "?d=" + base64url_digest(result.digest)) if gs1 else None,
                          share_url=resolver_url(request, campaign_id, base64url_digest(result.digest))),
     )
 

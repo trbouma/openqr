@@ -251,7 +251,7 @@ def test_gs1_registration_and_routes(publisher, monkeypatch):
                          files={"file": ("test.txt", content, "text/plain")})
     assert response.status_code == 200
     assert seen["gs1"].tags == [["gs1_gtin", TEST_GTIN], ["gs1_lot", "LOT1"]]
-    path = f"/01/{TEST_GTIN}/10/LOT1?digest={encoded}"
+    path = f"/01/{TEST_GTIN}/10/LOT1?d={encoded}"
     assert "https://example.com" + path in response.text
     assert "https://example.com/etr/" in response.text
     assert "Documentation test GTIN" in response.text
@@ -278,6 +278,11 @@ def test_gs1_registration_and_routes(publisher, monkeypatch):
     assert "No verified anchor with matching GS1 values" in client.get(path.replace("LOT1", "LOT2")).text
     response = client.get("/resolve", params={"reference": "https://example.com" + path}, follow_redirects=False)
     assert response.status_code == 303
+    assert response.headers["location"] == path
+    legacy = path.replace("?d=", "?digest=")
+    assert client.get(legacy).status_code == 200
+    assert client.get("/gs1/qr" + legacy).status_code == 200
+    response = client.get("/resolve", params={"reference": "https://example.com" + legacy}, follow_redirects=False)
     assert response.headers["location"] == path
 
 

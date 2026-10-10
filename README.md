@@ -219,6 +219,10 @@ to retrieval. Unsupported containers/codecs retain the download option.
 
 ## GS1 Digital Link integration
 
+See the [GS1 Digital Link and campaign resolver implementation note](docs/GS1_DIGITAL_LINK_IMPLEMENTATION_NOTE.md)
+for the FastAPI request flow, comparison of the two URL paths, signed tag
+conventions, and specification boundaries.
+
 Registration optionally accepts a GTIN, batch/lot (AI 10), and serial number
 (AI 21). Leave these blank to retain the existing digest-only workflow. For a
 demonstration, enter `09520123456788`, the documentation example GTIN; it is
@@ -234,11 +238,15 @@ Registration generates both the existing `/{campaign}/{digest}` QR and a normal
 QR encoding a GS1 Digital Link with an OpenQR extension:
 
 ```text
-https://example.com/01/09520123456788?digest=cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448
+https://example.com/01/09520123456788?d=cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448
 ```
 
+Generated GS1 links use `d` to save five bytes. The descriptive `digest` parameter
+remains supported with identical meaning. Supply either name exactly once, not
+both; both accept lowercase hex or canonical unpadded Base64URL digests.
+
 Optional qualifiers appear in order `/10/{lot}/21/{serial}`. The full SHA-256
-digest remains in the `digest` query parameter, not AI 21. Incoming digest values
+digest remains in the `d` (or `digest`) query parameter, not AI 21. Incoming digest values
 may be lowercase hex or canonical unpadded Base64URL; generated links use the
 latter. No serial-to-digest database is needed. GS1 links currently use the
 default `etr` resolution handler, independently of the registration campaign.
@@ -260,7 +268,7 @@ the artifact, both QR options, and anchor details. It reports whether a verified
 issue anchor with exactly matching digest and GS1 fields was found. A mismatch
 does not suppress other evidence or prevent independent artifact verification.
 The home-page lookup also accepts this Digital Link profile. `/gs1/qr/01/...`
-renders its PNG. Both query entry points require exactly one `digest` parameter;
+renders its PNG. Both query entry points require exactly one `d` or `digest` parameter;
 other GS1 keys, extensions and general resolver behaviours are not implemented.
 
 This is a bounded Digital Link integration, **not a GS1-conformant resolver**.

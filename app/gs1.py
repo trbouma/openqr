@@ -52,7 +52,7 @@ class GS1Data:
         parsed = urlsplit(base)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment or parsed.username:
             raise ValueError("GS1 links require an HTTP(S) public base URL without query, fragment, or credentials.")
-        return base.rstrip("/") + self.path + "?" + urlencode({"digest": base64url_digest(digest)})
+        return base.rstrip("/") + self.path + "?" + urlencode({"d": base64url_digest(digest)})
 
     def matches(self, anchor, digest):
         if not anchor.verified or ["action", "issue"] not in anchor.tags:
@@ -77,9 +77,12 @@ def parse_link(path, query):
         raise ValueError("Digital Link GTIN must have 14 digits.")
     data = GS1Data.validate(parts[1], values.get("10", ""), values.get("21", ""))
     params = parse_qs(query, keep_blank_values=True)
-    if set(params) != {"digest"} or len(params["digest"]) != 1:
-        raise ValueError("This OpenQR profile requires exactly one digest parameter and no other query parameters.")
-    reference = params["digest"][0]
+    if set(params) not in ({"d"}, {"digest"}):
+        raise ValueError("Use exactly one d or digest parameter and no other query parameters.")
+    references = next(iter(params.values()))
+    if len(references) != 1:
+        raise ValueError("Use exactly one d or digest parameter; repeated values are not allowed.")
+    reference = references[0]
     if not re.fullmatch(r"[0-9a-f]{64}|[A-Za-z0-9_-]{43}", reference):
         raise ValueError("Invalid artifact digest.")
     digest, _ = normalize_digest(reference)

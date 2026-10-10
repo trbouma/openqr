@@ -16,8 +16,15 @@ def test_round_trip_and_padding():
     data = GS1Data.validate(TEST_GTIN[1:], "BATCH%1", "BOTTLE001")
     url = urlsplit(data.url("https://example.com", DIGEST))
     assert url.path == f"/01/{TEST_GTIN}/10/BATCH%251/21/BOTTLE001"
+    assert url.query == "d=" + base64url_digest(DIGEST)
     assert parse_link(unquote(url.path), url.query) == (data, DIGEST)
     assert parse_link(f"/01/{TEST_GTIN}", "digest=" + DIGEST)[1] == DIGEST
+
+
+@pytest.mark.parametrize("name", ["d", "digest"])
+@pytest.mark.parametrize("reference", [DIGEST, base64url_digest(DIGEST)])
+def test_digest_parameter_aliases(name, reference):
+    assert parse_link(f"/01/{TEST_GTIN}", name + "=" + reference)[1] == DIGEST
 
 
 @pytest.mark.parametrize("gtin,lot,serial", [
@@ -36,6 +43,11 @@ def test_bad_fields(gtin, lot, serial):
     ("", ""), ("", "digest=no"),
     ("", "digest=" + DIGEST + "&digest=" + DIGEST),
     ("", "digest=" + DIGEST + "&unexpected=x"),
+    ("", "d="), ("", "d=no"),
+    ("", "d=" + DIGEST + "&d=" + DIGEST),
+    ("", "d=" + DIGEST + "&digest=" + DIGEST),
+    ("", "digest=" + DIGEST + "&d=" + "0" * 64),
+    ("", "d=" + DIGEST + "&unexpected=x"),
 ])
 def test_bad_links(suffix, query):
     with pytest.raises(ValueError):
