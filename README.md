@@ -1,5 +1,10 @@
 # OpenQR
 
+[User documentation](https://trbouma.github.io/openqr/) covers checking artifacts,
+registration, GS1 links, and verification boundaries. To preview locally, run
+`poetry install --with docs`, then `poetry run mkdocs serve --dev-addr 127.0.0.1:8001`.
+Validate documentation with `poetry run mkdocs build --strict`.
+
 OpenQR is a minimal public resolver for the
 [OpenETR QR Resolver Profile 1.0](https://github.com/trbouma/openetr/blob/main/docs/specs/OPENETR_QR_RESOLVER_PROFILE_1_0.md).
 It accepts the SHA-256 digest carried by a conforming OpenETR QR URL, queries

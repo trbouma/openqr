@@ -1,0 +1,51 @@
+site_name: OpenQR
+site_description: Scan a reference. Retrieve the artifact. Verify the evidence.
+site_url: https://trbouma.github.io/openqr/
+repo_url: https://github.com/trbouma/openqr
+repo_name: trbouma/openqr
+docs_dir: website
+site_dir: site
+theme:
+  name: material
+  logo: assets/openqr-logo.svg
+  favicon: assets/openqr-logo.svg
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Use dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Use light mode
+nav:
+  - Home: index.md
+  - Use OpenQR:
+      - Check An Artifact: checking.md
+      - Register An Artifact: registration.md
+      - GS1 Digital Links: gs1.md
+  - Understand OpenQR:
+      - Evidence And Trust: evidence.md
+      - Specifications And Design: references.md
+  - Run OpenQR: deployment.md
+  - Brand: brand.md
+markdown_extensions:
+  - attr_list
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+extra_css:
+  - stylesheets/extra.css
+copyright: OpenQR is open-source software released under the MIT License.

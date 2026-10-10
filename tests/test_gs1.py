@@ -12,6 +12,22 @@ from app.resolver import event_to_evidence
 DIGEST = "72f268d79dc36412a21d046cc2124b9ca02aab3c712eb23e67fd96d86a38e38f"
 
 
+def test_anchor_tag_discovery():
+    from app.gs1 import gs1_from_anchors
+    def anchor(tags, verified=True):
+        return SimpleNamespace(tags=[["o", DIGEST], ["action", "issue"], *tags], verified=verified)
+    data = GS1Data.validate(TEST_GTIN)
+    valid = anchor(data.tags)
+    assert gs1_from_anchors([valid, valid], DIGEST) == data
+    assert gs1_from_anchors([valid], "0" * 64) is None
+    assert gs1_from_anchors([anchor(data.tags, False)], DIGEST) is None
+    assert gs1_from_anchors([anchor([])], DIGEST) is None
+    assert gs1_from_anchors([anchor(data.tags * 2)], DIGEST) is None
+    assert gs1_from_anchors([anchor([["gs1_gtin", "invalid"]])], DIGEST) is None
+    assert gs1_from_anchors([anchor([*data.tags, ["gs1_lot"]])], DIGEST) is None
+    assert gs1_from_anchors([valid, anchor(GS1Data.validate(TEST_GTIN, "OTHER").tags)], DIGEST) is None
+
+
 def test_round_trip_and_padding():
     data = GS1Data.validate(TEST_GTIN[1:], "BATCH%1", "BOTTLE001")
     url = urlsplit(data.url("https://example.com", DIGEST))

@@ -43,13 +43,14 @@ h2 { line-height: 1.2; }
 .site-header, main, footer { width: min(calc(100% - 2rem), var(--max-width)); margin-inline: auto; }
 .site-header { display: flex; min-height: 5.25rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); }
 .brand { display: inline-flex; align-items: center; gap: .75rem; color: var(--text); text-decoration: none; }
-.brand img { width: 2.75rem; height: 2.75rem; border-radius: 8px; }
+.brand img { width: 2.75rem; height: 2.75rem; border-radius: 8px; background: white; padding: 3px; }
 .brand span { display: grid; line-height: 1.15; }
 .brand strong { font-size: 1.05rem; }
 .brand small { margin-top: .2rem; color: var(--muted); font-size: .75rem; }
 .header-link { color: var(--muted); font-size: .88rem; text-decoration: none; }
 .header-link:hover { color: var(--text); }
-.header-nav { display: flex; align-items: center; gap: 1rem; }
+.header-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.site-header { flex-wrap: wrap; padding-block: .75rem; }
 main { padding-block: clamp(2.5rem, 7vw, 5rem); }
 .intro { max-width: 44rem; }
 .intro > p:last-child { max-width: 40rem; color: var(--muted); font-size: 1.08rem; }

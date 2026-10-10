@@ -1,0 +1,13 @@
+:root {
+  --md-primary-fg-color: #11686d;
+  --md-accent-fg-color: #b84a30;
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #11686d;
+  --md-accent-fg-color: #f29478;
+}
+.md-typeset .openqr-mark { width: 128px; height: 128px; }
+.md-header__button.md-logo img { background: #fff; border-radius: 4px; padding: 2px; }
+.md-typeset h1, .md-typeset h2 { letter-spacing: 0; }
+.md-typeset a { text-underline-offset: 3px; }
+.md-typeset table:not([class]) { font-size: .75rem; }

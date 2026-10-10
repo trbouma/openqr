@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from stroma import BlossomPool, storage_threshold
 
 from app import identity
-from app.gs1 import GS1Data, parse_link
+from app.gs1 import GS1Data, parse_link, gs1_from_anchors
 from app.session import EncryptedSessionMiddleware, check_csrf, csrf_token
 
 from app.resolver import (
@@ -22,7 +22,6 @@ from app.resolver import (
     InvalidResolutionReference,
     ResolutionResult,
     normalize_lookup,
-    normalize_digest,
     resolve_anchor_evidence,
 )
 from app.registration import (
@@ -396,21 +395,6 @@ async def download_artifact(request: Request, campaign_id: str, reference: str, 
     return Response(content, media_type=media_type or "application/octet-stream", headers=headers)
 
 
-@app.get("/gs1-link")
-async def create_gs1_link(request: Request, digest: str = "", gtin: str = "",
-                          lot: str = "", serial: str = ""):
-    try:
-        digest, _ = normalize_digest(digest)
-        data = GS1Data.validate(gtin, lot, serial)
-    except ValueError as exc:
-        return templates.TemplateResponse(
-            request, "error.html",
-            template_context(request, title="Invalid GS1 link", message=str(exc)),
-            status_code=400,
-        )
-    return RedirectResponse(data.path + "?d=" + base64url_digest(digest), status_code=303)
-
-
 @app.get("/gs1/qr/01/{gs1_path:path}")
 async def gs1_qr(request: Request, gs1_path: str):
     try:
@@ -453,12 +437,16 @@ async def render_resolution(request: Request, campaign_id: str, reference: str, 
             status_code=502,
         )
 
+    incoming_gs1_unconfirmed = bool(gs1 and not any(
+        gs1.matches(anchor, result.digest) for anchor in result.anchors))
+    gs1 = gs1_from_anchors(result.anchors, result.digest)
     artifact_status = await retrieve_artifact(result.digest, **artifact_options(result))
     return templates.TemplateResponse(
         request,
         "result.html",
         template_context(request, result=result, campaign_id=campaign_id, artifact_status=artifact_status,
                          gs1=gs1,
+                         incoming_gs1_unconfirmed=incoming_gs1_unconfirmed,
                          gs1_match=bool(gs1 and any(gs1.matches(anchor, result.digest) for anchor in result.anchors)),
                          gs1_url=gs1.url(public_base_url(request), result.digest) if gs1 else None,
                          gs1_qr_url=("/gs1/qr" + gs1.path + "?d=" + base64url_digest(result.digest)) if gs1 else None,

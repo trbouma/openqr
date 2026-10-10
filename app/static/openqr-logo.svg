@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">OpenQR</title>
+  <desc id="desc">Three teal scan corners surround a record, with a coral arrow opening toward an independent reader. A symbol, not a scannable barcode.</desc>
+  <path fill="#147d83" d="M56 216V56h160v56H112v104zm240-160h160v160h-56V112H296zM56 296h56v104h104v56H56z"/>
+  <path fill="#163f4b" d="M168 168h176v56H224v120h-56z"/>
+  <path fill="#e16f51" d="M288 264h168v168h-56v-72l-96 96-40-40 96-96h-72z"/>
+</svg>

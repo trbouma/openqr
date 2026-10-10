@@ -72,23 +72,10 @@
   <a class="resolver-link" href="{{ share_url }}">{{ share_url }}</a>
 </section>
 
+{% if incoming_gs1_unconfirmed %}
+<p class="notice">No verified anchor with matching GS1 values was found for the incoming link. Its product association is unconfirmed.</p>
+{% endif %}
 {% include "gs1_qr.html" %}
-<section class="lookup-panel" aria-labelledby="gs1-create-heading">
-  <h2 id="gs1-create-heading">Generate a GS1 Digital Link</h2>
-  <p class="notice">Use only a GTIN, lot number, and serial number that you are authorized to use in accordance with GS1 standards. OpenQR checks formatting, not your authorization or GS1 assignment.</p>
-  <form action="/gs1-link" method="get" data-progress="gs1-create-progress">
-    <input type="hidden" name="digest" value="{{ result.digest }}">
-    <label for="gs1-gtin">GTIN</label>
-    <input id="gs1-gtin" name="gtin" required inputmode="numeric" pattern="[0-9]{8}|[0-9]{12,14}" maxlength="14" value="{{ gs1.gtin if gs1 else '' }}">
-    <label for="gs1-lot">Lot No. (optional)</label>
-    <input id="gs1-lot" name="lot" maxlength="20" value="{{ gs1.lot if gs1 else '' }}">
-    <label for="gs1-serial">Serial No. (optional)</label>
-    <input id="gs1-serial" name="serial" maxlength="20" value="{{ gs1.serial if gs1 else '' }}">
-    <p class="field-note">Blank optional fields are omitted. The link uses this result's artifact digest. Generating a link does not publish or modify an anchor, or prove that these identifiers appear in the artifact.</p>
-    <button type="submit">Generate link and QR code</button>
-  </form>
-  <p id="gs1-create-progress" class="request-progress" role="status" aria-live="polite" aria-atomic="true"><span class="progress-spinner" aria-hidden="true" hidden></span><span data-progress-message="Please wait. Generating the link and checking its evidence..."></span></p>
-</section>
 {{ anchor_details }}
 <script type="module" src="/static/share.js"></script>
 {% endblock %}

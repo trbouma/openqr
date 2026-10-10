@@ -62,6 +62,28 @@ class GS1Data:
         return all([tag[1] for tag in anchor.tags if len(tag) >= 2 and tag[0] == key]
                    == ([value] if value else []) for key, value in expected.items())
 
+    @classmethod
+    def from_anchor(cls, anchor, digest):
+        values = {}
+        for tag in anchor.tags:
+            if tag and tag[0] in {"gs1_gtin", "gs1_lot", "gs1_serial"}:
+                if len(tag) != 2 or tag[0] in values:
+                    return None
+                values[tag[0]] = tag[1]
+        try:
+            data = cls.validate(values.get("gs1_gtin", ""),
+                                values.get("gs1_lot", ""), values.get("gs1_serial", ""))
+        except (ValueError, TypeError, AttributeError):
+            return None
+        return data if data.matches(anchor, digest) else None
+
+
+def gs1_from_anchors(anchors, digest):
+    candidates = {data for anchor in anchors
+                  if (data := GS1Data.from_anchor(anchor, digest)) is not None}
+    # Do not silently choose between conflicting signed product associations.
+    return next(iter(candidates)) if len(candidates) == 1 else None
+
 
 def parse_link(path, query):
     parts = path.strip("/").split("/")
