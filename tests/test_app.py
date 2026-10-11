@@ -297,7 +297,7 @@ def test_gs1_registration_and_routes(publisher, monkeypatch):
     response = post_form("/register", data={"gs1_gtin": TEST_GTIN, "gs1_lot": "LOT1"},
                          files={"file": ("test.txt", content, "text/plain")})
     assert response.status_code == 200
-    assert seen["gs1"].tags == [["gs1_gtin", TEST_GTIN], ["gs1_lot", "LOT1"]]
+    assert seen["gs1"].tags == [["g", TEST_GTIN], ["gs1_lot", "LOT1"]]
     path = f"/01/{TEST_GTIN}/10/LOT1?d={encoded}"
     assert "https://example.com" + path in response.text
     assert "https://example.com/etr/" in response.text

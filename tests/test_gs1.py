@@ -19,6 +19,11 @@ def test_anchor_tag_discovery():
     data = GS1Data.validate(TEST_GTIN)
     valid = anchor(data.tags)
     assert gs1_from_anchors([valid, valid], DIGEST) == data
+    assert gs1_from_anchors([anchor([["gs1_gtin", TEST_GTIN]])], DIGEST) == data
+    assert gs1_from_anchors([anchor([*data.tags, ["gs1_gtin", TEST_GTIN]])], DIGEST) == data
+    assert gs1_from_anchors([anchor([*data.tags, ["gs1_gtin", "00000012345670"]])], DIGEST) is None
+    assert gs1_from_anchors([anchor([["gs1_gtin", TEST_GTIN]] * 2)], DIGEST) is None
+    assert gs1_from_anchors([anchor([["g", TEST_GTIN[1:]]])], DIGEST) is None
     assert gs1_from_anchors([valid], "0" * 64) is None
     assert gs1_from_anchors([anchor(data.tags, False)], DIGEST) is None
     assert gs1_from_anchors([anchor([])], DIGEST) is None
@@ -91,5 +96,5 @@ def test_gs1_tags_are_signed_and_matched(monkeypatch):
     assert not GS1Data.validate(TEST_GTIN, "LOT2", "BOTTLE1").matches(anchor, DIGEST)
     assert not GS1Data.validate(TEST_GTIN).matches(anchor, DIGEST)
     assert not data.matches(anchor, "0" * 64)
-    anchor.tags.append(["gs1_gtin", TEST_GTIN])
+    anchor.tags.append(["g", TEST_GTIN])
     assert not data.matches(anchor, DIGEST)

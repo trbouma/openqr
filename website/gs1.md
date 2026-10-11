@@ -3,6 +3,13 @@
 A GS1 Digital Link carries a GTIN and optional lot and serial identifiers.
 OpenQR adds an artifact digest using the compact `d` query parameter.
 
+New anchors use the indexed `g` tag for the canonical 14-digit GTIN. Readers
+also accept legacy `gs1_gtin`; if both appear they must agree. Repeated tags,
+malformed values, or conflicting aliases do not establish a product association.
+Lot and serial remain `gs1_lot` and `gs1_serial`. Product discovery can use
+`{"kinds": [1415], "#g": ["09520123456788"]}`; digest lookup still uses `#o`.
+Old anchors with only `gs1_gtin` cannot be found through a `#g` filter alone.
+
 ## Generate From A Result
 
 After checking a link or original file, OpenQR automatically displays a GS1 link

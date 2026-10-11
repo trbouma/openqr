@@ -128,7 +128,7 @@ Registration validates optional GS1 inputs before storage or publication.
 [
   ["o", "72f268d79dc36412a21d046cc2124b9ca02aab3c712eb23e67fd96d86a38e38f"],
   ["action", "issue"],
-  ["gs1_gtin", "09520123456788"],
+  ["g", "09520123456788"],
   ["gs1_lot", "LOT1"],
   ["gs1_serial", "BOTTLE000001"]
 ]
@@ -139,6 +139,18 @@ conventions for structured event data, not newly allocated GS1 Application
 Identifiers. The normal anchor metadata and confirmed Blossom hints remain.
 See the [OpenETR wire-format specification](https://github.com/trbouma/openetr/blob/main/docs/specs/OPENETR_NOSTR_WIRE_FORMAT_SPEC.md)
 for the underlying event model.
+
+New events use `g` for the canonical 14-digit GTIN, enabling the NIP-01 filter
+`{"kinds": [1415], "#g": ["09520123456788"]}`. Current artifact lookup continues
+to use `#o`; this change enables product indexing but does not add a GTIN search UI.
+Readers accept legacy `gs1_gtin`. If both names occur, their values must agree;
+duplicate or malformed association tags are rejected. Old anchors containing
+only `gs1_gtin` will not appear in `#g`-only queries. No old event is rewritten.
+
+Result-page links are generated from validated anchor tags, not incoming URL
+values. One unambiguous association yields a GS1 panel; absent or conflicting
+associations do not. An incoming GS1 URL is still independently checked and a
+mismatch is reported without hiding the artifact or signed evidence.
 
 The full digest never occupies AI 21: 43-character Base64URL or 64-character hex
 does not fit the 20-character serial field. It stays in `o` in the event and

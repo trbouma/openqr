@@ -260,7 +260,7 @@ Before signing the kind 1415 anchor, OpenQR adds these application-convention ta
 
 | Tag | Value |
 | --- | --- |
-| `gs1_gtin` | Normalized 14-digit GTIN |
+| `g` | Normalized 14-digit GTIN; query with `#g` scoped to kind 1415 |
 | `gs1_lot` | Optional batch/lot |
 | `gs1_serial` | Optional serial number, never the full digest |
 

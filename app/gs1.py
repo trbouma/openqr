@@ -45,7 +45,7 @@ class GS1Data:
     @property
     def tags(self):
         return [[name, value] for name, value in [
-            ("gs1_gtin", self.gtin), ("gs1_lot", self.lot), ("gs1_serial", self.serial),
+            ("g", self.gtin), ("gs1_lot", self.lot), ("gs1_serial", self.serial),
         ] if value]
 
     def url(self, base, digest):
@@ -55,27 +55,31 @@ class GS1Data:
         return base.rstrip("/") + self.path + "?" + urlencode({"d": base64url_digest(digest)})
 
     def matches(self, anchor, digest):
-        if not anchor.verified or ["action", "issue"] not in anchor.tags:
-            return False
-        expected = {"o": digest, "gs1_gtin": self.gtin,
-                    "gs1_lot": self.lot, "gs1_serial": self.serial}
-        return all([tag[1] for tag in anchor.tags if len(tag) >= 2 and tag[0] == key]
-                   == ([value] if value else []) for key, value in expected.items())
+        return self == self.from_anchor(anchor, digest)
 
     @classmethod
     def from_anchor(cls, anchor, digest):
+        if not anchor.verified or ["action", "issue"] not in anchor.tags:
+            return None
+        if [tag[1] for tag in anchor.tags if len(tag) >= 2 and tag[0] == "o"] != [digest]:
+            return None
         values = {}
         for tag in anchor.tags:
-            if tag and tag[0] in {"gs1_gtin", "gs1_lot", "gs1_serial"}:
-                if len(tag) != 2 or tag[0] in values:
+            if tag and tag[0] in {"g", "gs1_gtin", "gs1_lot", "gs1_serial"}:
+                if len(tag) != 2 or tag[0] in values or not tag[1]:
                     return None
                 values[tag[0]] = tag[1]
+        if "g" in values and "gs1_gtin" in values and values["g"] != values["gs1_gtin"]:
+            return None
+        gtin = values.get("g", values.get("gs1_gtin", ""))
         try:
-            data = cls.validate(values.get("gs1_gtin", ""),
+            data = cls.validate(gtin,
                                 values.get("gs1_lot", ""), values.get("gs1_serial", ""))
         except (ValueError, TypeError, AttributeError):
             return None
-        return data if data.matches(anchor, digest) else None
+        if (data.gtin, data.lot, data.serial) != (gtin, values.get("gs1_lot", ""), values.get("gs1_serial", "")):
+            return None
+        return data
 
 
 def gs1_from_anchors(anchors, digest):
