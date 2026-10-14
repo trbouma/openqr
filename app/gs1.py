@@ -11,6 +11,26 @@ TEST_GTIN = "09520123456788"
 XCHAR = re.compile(r"^[A-Za-z0-9!\"%&'()*+,\-./:;<=>?_]{1,20}$")
 
 
+def normalize_campaign(value):
+    value = (value or "").strip()
+    if value and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", value):
+        raise ValueError("Campaign must use 1-64 letters, digits, hyphens, or underscores and begin with a letter or digit.")
+    return value
+
+
+def campaign_from_query(query):
+    params = parse_qs(query, keep_blank_values=True)
+    values = [value.strip() for key in ("c", "campaign") for value in params.get(key, []) if value.strip()]
+    if len(values) > 1:
+        raise ValueError("Use only one non-empty c or campaign parameter.")
+    return normalize_campaign(values[0] if values else "")
+
+
+def with_campaign(url, campaign):
+    campaign = normalize_campaign(campaign)
+    return url + (("&" if "?" in url else "?") + urlencode({"c": campaign}) if campaign else "")
+
+
 @dataclass(frozen=True)
 class GS1Data:
     gtin: str
@@ -48,11 +68,11 @@ class GS1Data:
             ("g", self.gtin), ("gs1_lot", self.lot), ("gs1_serial", self.serial),
         ] if value]
 
-    def url(self, base, digest):
+    def url(self, base, digest, campaign=""):
         parsed = urlsplit(base)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment or parsed.username:
             raise ValueError("GS1 links require an HTTP(S) public base URL without query, fragment, or credentials.")
-        return base.rstrip("/") + self.path + "?" + urlencode({"d": base64url_digest(digest)})
+        return with_campaign(base.rstrip("/") + self.path + "?" + urlencode({"d": base64url_digest(digest)}), campaign)
 
     def matches(self, anchor, digest):
         return self == self.from_anchor(anchor, digest)
@@ -103,8 +123,11 @@ def parse_link(path, query):
         raise ValueError("Digital Link GTIN must have 14 digits.")
     data = GS1Data.validate(parts[1], values.get("10", ""), values.get("21", ""))
     params = parse_qs(query, keep_blank_values=True)
+    campaign_from_query(query)
+    params.pop("c", None)
+    params.pop("campaign", None)
     if set(params) not in ({"d"}, {"digest"}):
-        raise ValueError("Use exactly one d or digest parameter and no other query parameters.")
+        raise ValueError("Use exactly one d or digest parameter, with optional c or campaign only.")
     references = next(iter(params.values()))
     if len(references) != 1:
         raise ValueError("Use exactly one d or digest parameter; repeated values are not allowed.")

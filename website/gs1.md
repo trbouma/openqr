@@ -33,6 +33,27 @@ New links use `d`, saving five bytes compared with `digest`. Both names are
 accepted, with hexadecimal or Base64URL digest values. Use exactly one name and
 one value; duplicates and both aliases together are rejected.
 
+## Optional Campaign
+
+Registration also accepts a separate campaign query identifier. Generated links
+use `c`; readers accept `c` or `campaign`. For example:
+
+```text
+https://example.com/01/09520123456788/10/LOT1?d=cvJo153DZBKiHQRswhJLnKAqqzxxLrI-Z_2W2Go4448&c=wine-2027
+```
+
+Missing, empty, or whitespace-only campaign values are ignored and omitted from
+generated links. A non-empty value must begin with a letter or digit and contain
+only letters, digits, hyphens, or underscores, up to 64 characters. More than one
+non-empty value is rejected, including repeated values or both aliases together.
+An empty alias alongside one non-empty alias is accepted.
+
+This parameter is preserved through link redirects, sharing, and QR generation
+for both regular and GS1 links. It is independent of the existing resolver path,
+does not change the digest, and is not added to the signed anchor. It is an
+untrusted routing hint reserved for future campaign behavior, not proof of
+campaign membership or authority. No campaign-specific lookup rules are applied.
+
 ## Association Is Not Publication
 
 Generating a link from a result does not change or publish an anchor. OpenQR

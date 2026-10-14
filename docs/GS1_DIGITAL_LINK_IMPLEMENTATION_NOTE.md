@@ -106,8 +106,11 @@ transferable-record ruleset.
 - Batch/lot and serial are optional, limited to 20 supported GS1 characters,
   and ordered as AI 10 before AI 21 when both occur.
 - Slash-containing and dot-only qualifiers are excluded for safe application routing.
-- Exactly one `d` or `digest` parameter is required. Both names together, duplicate values, other query
-  parameters, unsupported AIs, invalid qualifiers, and invalid digests are rejected.
+- Exactly one `d` or `digest` parameter is required. Both names together and duplicate
+  digest values are rejected. Optional `c` or `campaign` parameters are accepted;
+  empty values are ignored, but more than one non-empty campaign value is rejected.
+  Other query parameters, unsupported AIs, invalid qualifiers, and invalid digests
+  are rejected.
 - Base64URL values must decode canonically to exactly 32 bytes.
 
 This is not a general-purpose parser for every valid GS1 Digital Link. For
@@ -157,8 +160,13 @@ does not fit the 20-character serial field. It stays in `o` in the event and
 `d` in generated Digital Links, saving five ASCII bytes compared with `digest`.
 The descriptive `digest` alias remains supported, with the same validation and
 meaning. Generation and redirects canonicalize to `d`; previously printed links
-remain usable. The registration campaign is carried by the regular
-link, not the GS1 link or these GS1 tags.
+remain usable. The existing registration resolver path is carried by the regular
+link only. A separate optional campaign query field is carried as `c` on both
+link formats, accepting `campaign` as an input alias. Missing and blank values
+are omitted. Campaign values use 1-64 ASCII letters, digits, hyphens, or underscores,
+beginning with a letter or digit. This unsigned routing hint does not change the
+artifact digest or the anchor's GS1 tags; campaign-specific behavior is not yet
+implemented. Redirects and regenerated QR codes preserve it and canonicalize to `c`.
 
 Supplying a GTIN generates both QR options on the registration result. Leaving
 all GS1 fields blank preserves ordinary registration. The same `qrcode` renderer

@@ -197,6 +197,46 @@ def test_register_artifact_accepts_campaign_id(publisher):
     assert "http://testserver/wine-2026/" in response.text
 
 
+@pytest.mark.parametrize("fields,expected", [
+    ({"campaign": "spring-2027"}, "spring-2027"),
+    ({"c": "spring-2027"}, "spring-2027"),
+    ({"campaign": " ", "c": "spring-2027"}, "spring-2027"),
+    ({"campaign": " "}, ""),
+])
+def test_registration_campaign_query(publisher, fields, expected):
+    response = post_form("/register", data={"gs1_gtin": "09520123456788", **fields},
+                         files={"file": ("wine.txt", b"wine", "text/plain")})
+    assert response.status_code == 200
+    assert ("c=spring-2027" in response.text) == bool(expected)
+    assert "http://testserver/etr/" in response.text
+
+
+@pytest.mark.parametrize("name", ["c", "campaign"])
+def test_campaign_preserved_in_redirect_and_qr(monkeypatch, name):
+    from app import main
+    digest = "a" * 64
+    captured = []
+    monkeypatch.setattr(main, "render_qr_png", lambda url: captured.append(url) or b"png")
+    url = f"https://example.com/01/09520123456788?d={digest}&{name}=wine"
+    response = client.get("/resolve", params={"reference": url}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("&c=wine")
+    response = client.get(f"/gs1/qr/01/09520123456788?d={digest}&{name}=wine")
+    assert response.status_code == 200
+    assert captured[-1].endswith("&c=wine")
+    response = client.get(f"/qr/etr/{digest}?{name}=wine")
+    assert response.status_code == 200
+    assert captured[-1].endswith("?c=wine")
+    response = client.get("/resolve", params={"reference": f"https://example.com/etr/{digest}?{name}=wine"}, follow_redirects=False)
+    assert response.headers["location"] == f"/etr/{digest}?c=wine"
+
+
+def test_registration_rejects_conflicting_campaigns(publisher):
+    response = post_form("/register", data={"c": "one", "campaign": "two"},
+                         files={"file": ("wine.txt", b"wine", "text/plain")})
+    assert response.status_code == 400
+
+
 @pytest.mark.parametrize("overlap", [True, False])
 def test_registration_displays_publication_and_query_scope(monkeypatch, publisher, overlap):
     from app import main

@@ -5,7 +5,7 @@ import os
 import re
 import secrets
 from pathlib import Path
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from stroma import BlossomPool, storage_threshold
 
 from app import identity
-from app.gs1 import GS1Data, parse_link, gs1_from_anchors
+from app.gs1 import GS1Data, parse_link, gs1_from_anchors, normalize_campaign, campaign_from_query, with_campaign
 from app.session import EncryptedSessionMiddleware, check_csrf, csrf_token
 
 from app.resolver import (
@@ -174,7 +174,7 @@ def public_base_url(request: Request) -> str:
 
 
 def resolver_url(request: Request, campaign_id: str, reference: str) -> str:
-    return f"{public_base_url(request)}/{quote(campaign_id, safe='')}/{quote(reference, safe='')}"
+    return with_campaign(f"{public_base_url(request)}/{quote(campaign_id, safe='')}/{quote(reference, safe='')}", campaign_from_query(request.url.query))
 
 
 def normalize_campaign_id(value: str | None) -> str:
@@ -228,6 +228,8 @@ async def register_artifact(
     request: Request,
     file: UploadFile = File(...),
     campaign_id: str = Form(""),
+    campaign: str = Form(""),
+    c: str = Form(""),
     store_on_blossom: str | None = Form(None),
     csrf: str = Form(""),
     gs1_gtin: str = Form(""),
@@ -257,6 +259,9 @@ async def register_artifact(
         )
     try:
         resolved_campaign_id = normalize_campaign_id(campaign_id)
+        if campaign.strip() and c.strip():
+            raise ValueError("Use only one non-empty c or campaign field.")
+        campaign = normalize_campaign(campaign.strip() or c)
         gs1 = GS1Data.validate(gs1_gtin, gs1_lot, gs1_serial) if gs1_gtin.strip() else None
         if not gs1 and (gs1_lot.strip() or gs1_serial.strip()):
             raise ValueError("A GTIN is required when supplying batch or serial information.")
@@ -266,10 +271,11 @@ async def register_artifact(
     except (ValueError, ArtifactUploadTooLarge) as exc:
         await file.close()
         return await registration_page(request, error_message=str(exc), campaign_id=campaign_id,
+                                       campaign=campaign,
                                        gs1_gtin=gs1_gtin, gs1_lot=gs1_lot, gs1_serial=gs1_serial, status_code=400)
 
     encoded_digest = base64url_digest(artifact.digest)
-    public_url = resolver_url(request, resolved_campaign_id, encoded_digest)
+    public_url = with_campaign(f"{public_base_url(request)}/{quote(resolved_campaign_id, safe='')}/{encoded_digest}", campaign)
     blossom = await maybe_upload_to_blossom(
         artifact,
         requested=(store_on_blossom or "").lower() in {"1", "true", "yes", "on"},
@@ -296,15 +302,15 @@ async def register_artifact(
             campaign_id=resolved_campaign_id,
             encoded_digest=encoded_digest,
             resolver_url=public_url,
-            qr_image_url=(
+            qr_image_url=with_campaign((
                 f"/qr/{quote(resolved_campaign_id, safe='')}/"
                 f"{quote(encoded_digest, safe='')}"
-            ),
+            ), campaign),
             blossom=blossom,
             anchor=anchor,
             gs1=gs1,
-            gs1_url=gs1.url(public_base_url(request), artifact.digest) if gs1 else None,
-            gs1_qr_url=("/gs1/qr" + gs1.path + "?d=" + encoded_digest) if gs1 else None,
+            gs1_url=gs1.url(public_base_url(request), artifact.digest, campaign) if gs1 else None,
+            gs1_qr_url=with_campaign("/gs1/qr" + gs1.path + "?d=" + encoded_digest, campaign) if gs1 else None,
             publication_relay_source="Acting Profile (home relays if unset)" if REGISTRATION_MODE == "interactive" else "Deployment relay configuration",
             relay_scope_mismatch=bool(anchor.get("relays")) and not (
                 {relay.rstrip("/") for relay in anchor["relays"]}
@@ -320,6 +326,7 @@ async def qr_image(request: Request, campaign_id: str, reference: str):
     try:
         resolved_campaign_id = normalize_campaign_id(campaign_id)
         _, digest, _ = normalize_lookup(reference)
+        campaign_from_query(request.url.query)
     except (InvalidResolutionReference, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     canonical_reference = base64url_digest(digest)
@@ -337,8 +344,12 @@ async def resolve_input(reference: str = Query(..., min_length=1)):
             if parsed.fragment:
                 raise ValueError("GS1 links cannot contain a fragment in this profile.")
             gs1, digest = parse_link(unquote(parsed.path), parsed.query)
-            return RedirectResponse(gs1.path + "?d=" + base64url_digest(digest), status_code=303)
-        campaign_id, digest, supplied_encoding = normalize_lookup(reference)
+            return RedirectResponse(with_campaign(gs1.path + "?d=" + base64url_digest(digest), campaign_from_query(parsed.query)), status_code=303)
+        campaign = campaign_from_query(parsed.query)
+        if parsed.query and set(parse_qs(parsed.query, keep_blank_values=True)) - {"c", "campaign"}:
+            raise ValueError("Resolver links only accept optional c or campaign query parameters.")
+        lookup_reference = parsed._replace(query="").geturl() if parsed.scheme else reference
+        campaign_id, digest, supplied_encoding = normalize_lookup(lookup_reference)
     except ValueError as exc:
         return RedirectResponse(
             url=f"/?error={quote(str(exc))}&reference={quote(reference)}",
@@ -347,7 +358,7 @@ async def resolve_input(reference: str = Query(..., min_length=1)):
     canonical = digest
     if supplied_encoding == "base64url":
         canonical = base64.urlsafe_b64encode(bytes.fromhex(digest)).decode("ascii").rstrip("=")
-    return RedirectResponse(url=f"/{quote(campaign_id)}/{canonical}", status_code=303)
+    return RedirectResponse(url=with_campaign(f"/{quote(campaign_id)}/{canonical}", campaign), status_code=303)
 
 
 @app.get("/artifact/{campaign_id}/{reference}")
@@ -399,7 +410,7 @@ async def download_artifact(request: Request, campaign_id: str, reference: str, 
 async def gs1_qr(request: Request, gs1_path: str):
     try:
         data, digest = parse_link("/01/" + gs1_path, request.url.query)
-        url = data.url(public_base_url(request), digest)
+        url = data.url(public_base_url(request), digest, campaign_from_query(request.url.query))
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return Response(render_qr_png(url), media_type="image/png")
@@ -421,8 +432,9 @@ async def resolve_html(request: Request, campaign_id: str, reference: str):
 
 async def render_resolution(request: Request, campaign_id: str, reference: str, gs1=None):
     try:
+        campaign = campaign_from_query(request.url.query)
         result = await perform_lookup(campaign_id, reference)
-    except InvalidResolutionReference as exc:
+    except (InvalidResolutionReference, ValueError) as exc:
         return templates.TemplateResponse(
             request,
             "error.html",
@@ -448,8 +460,9 @@ async def render_resolution(request: Request, campaign_id: str, reference: str, 
                          gs1=gs1,
                          incoming_gs1_unconfirmed=incoming_gs1_unconfirmed,
                          gs1_match=bool(gs1 and any(gs1.matches(anchor, result.digest) for anchor in result.anchors)),
-                         gs1_url=gs1.url(public_base_url(request), result.digest) if gs1 else None,
-                         gs1_qr_url=("/gs1/qr" + gs1.path + "?d=" + base64url_digest(result.digest)) if gs1 else None,
+                         gs1_url=gs1.url(public_base_url(request), result.digest, campaign) if gs1 else None,
+                         gs1_qr_url=with_campaign("/gs1/qr" + gs1.path + "?d=" + base64url_digest(result.digest), campaign) if gs1 else None,
+                         qr_image_url=with_campaign(f"/qr/{quote(campaign_id, safe='')}/{result.digest}", campaign),
                          share_url=resolver_url(request, campaign_id, base64url_digest(result.digest))),
     )
 

@@ -12,6 +12,27 @@ from app.resolver import event_to_evidence
 DIGEST = "72f268d79dc36412a21d046cc2124b9ca02aab3c712eb23e67fd96d86a38e38f"
 
 
+@pytest.mark.parametrize("query,expected", [
+    ("", ""), ("&c=", ""), ("&campaign=%20", ""),
+    ("&c=wine-2026", "wine-2026"), ("&campaign=wine-2026", "wine-2026"),
+    ("&c=&campaign=wine-2026", "wine-2026"),
+])
+def test_optional_campaign(query, expected):
+    from app.gs1 import campaign_from_query
+    query = "digest=" + DIGEST + query
+    data, digest = parse_link(f"/01/{TEST_GTIN}", query)
+    assert campaign_from_query(query) == expected
+    url = data.url("https://example.com", digest, expected)
+    assert ("&c=" in url) == bool(expected)
+    assert parse_link(urlsplit(url).path, urlsplit(url).query) == (data, digest)
+
+
+@pytest.mark.parametrize("extra", ["c=a&campaign=b", "c=a&c=a", "c=../bad", "campaign=" + "a" * 65])
+def test_invalid_campaign(extra):
+    with pytest.raises(ValueError):
+        parse_link(f"/01/{TEST_GTIN}", "d=" + DIGEST + "&" + extra)
+
+
 def test_anchor_tag_discovery():
     from app.gs1 import gs1_from_anchors
     def anchor(tags, verified=True):

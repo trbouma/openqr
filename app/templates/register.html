@@ -59,9 +59,13 @@
     <input id="file" name="file" type="file" required>
     <p class="field-note">Maximum upload size: {{ max_upload_bytes }} bytes.</p>
 
-    <label for="campaign_id">Campaign ID <span class="optional">Optional</span></label>
+    <label for="campaign_id">Resolver path <span class="optional">Optional</span></label>
     <input id="campaign_id" name="campaign_id" type="text" value="{{ campaign_id or '' }}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="etr" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}">
     <p class="field-note">Leave blank to use <code>etr</code>. The campaign ID becomes the first resolver path segment.</p>
+
+    <label for="campaign">Campaign ID (query parameter) <span class="optional">Optional</span></label>
+    <input id="campaign" name="campaign" type="text" value="{{ campaign or '' }}" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}">
+    <p class="field-note">Included as <code>c</code> in links and QR codes. Leave blank to omit.</p>
 
     <details {% if gs1_gtin or gs1_lot or gs1_serial %}open{% endif %}>
       <summary>GS1 Digital Link (optional)</summary>

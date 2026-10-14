@@ -4,7 +4,10 @@ Open **Register**, sign in using an OpenETR Control Desk Key, and select an
 Acting Profile. The profile signs the new anchor. Profiles are managed through
 OpenETR; OpenQR uses the same relay-backed identity records.
 
-Choose the artifact and optionally supply a campaign identifier. Choose Blossom
+Choose the artifact and optionally supply a resolver path and a separate campaign
+query identifier. The path defaults to `etr`; the campaign query field defaults
+to absent. When supplied, it is included as `c` in both regular and GS1 links.
+Readers also accept `campaign`. Blank campaign values are ignored. Choose Blossom
 storage when you want the app to upload a retrievable copy. Without a stored or
 otherwise available copy, a digest alone cannot make the artifact available.
 
